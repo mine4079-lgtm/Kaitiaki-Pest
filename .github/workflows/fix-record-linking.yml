@@ -1,0 +1,46 @@
+name: Fix Trap.NZ record linking
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch record linking
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('index.html')
+          s=p.read_text()
+          if 'Kaitiaki Trap History v2' in s:
+              raise SystemExit(0)
+          s=s.replace('/* Kaitiaki Trap History v1 */','/* Kaitiaki Trap History v2 */',1)
+          old="""const rows=DATA.records.filter(r=>String(r.trap_code||'').trim().toLowerCase()===code.toLowerCase()).sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||'')));\nif(!rows.length)return '<p class=\\\"hint\\\">No monitoring records found for this trap.</p>';"""
+          new="""const norm=v=>String(v??'').trim().toLowerCase().replace(/\\s+/g,'');\nconst codes=[trap.title,trap.id,trap.props?.trap_code,trap.props?.code,trap.props?.trap_id,trap.props?.main_trap_id].map(norm).filter(Boolean);\nconst rows=DATA.records.filter(r=>[r.trap_code,r.code,r.trap_id,r.main_trap_id,r.trap,r.trap_name].some(v=>codes.includes(norm(v)))).sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||'')));\nif(!rows.length)return `<p class=\\\"hint\\\">No records linked to ${esc(code)}. Trap records feed returned ${DATA.records.length.toLocaleString()} records.</p>`;"""
+          if old not in s:
+              raise SystemExit('history block not found')
+          s=s.replace(old,new,1)
+          oldmap="""DATA.records=rf.map(f=>{let p=f.properties||{};return{trap_code:String(p.trap_code??''),trap_type:String(p.trap_type??''),trap_status:String(p.trap_status??''),trap_condition:String(p.trap_condition??''),rebaited:p.rebaited,bait_at_arrival:String(p.bait_at_arrival??''),bait_at_departure:String(p.bait_at_departure??''),strikes:p.strikes,species_caught:String(p.species_caught??''),gender:String(p.gender??''),maturity:String(p.maturity??''),record_date:String(p.record_date??''),recorded_by:String(p.recorded_by??''),record_notes:String(p.record_notes??''),prev_record_date:String(p.prev_record_date??''),next_record_date:String(p.next_record_date??'')}});"""
+          newmap="""DATA.records=rf.map(f=>{let p=f.properties||{};return{trap_code:String(p.trap_code??''),code:String(p.code??''),trap_id:String(p.trap_id??''),main_trap_id:String(p.main_trap_id??''),trap:String(p.trap??''),trap_name:String(p.trap_name??''),trap_type:String(p.trap_type??''),trap_status:String(p.trap_status??''),trap_condition:String(p.trap_condition??''),rebaited:p.rebaited,bait_at_arrival:String(p.bait_at_arrival??''),bait_at_departure:String(p.bait_at_departure??''),strikes:p.strikes,species_caught:String(p.species_caught??''),gender:String(p.gender??''),maturity:String(p.maturity??''),record_date:String(p.record_date??''),recorded_by:String(p.recorded_by??''),record_notes:String(p.record_notes??''),prev_record_date:String(p.prev_record_date??''),next_record_date:String(p.next_record_date??''),props:p}});"""
+          if oldmap not in s:
+              raise SystemExit('record map not found')
+          s=s.replace(oldmap,newmap,1)
+          oldstatus="""$('status').textContent=`Trap.NZ sync complete — ${DATA.traps.length.toLocaleString()} traps • ${DATA.monitoring.length.toLocaleString()} monitoring • ${DATA.lines.length.toLocaleString()} lines. READ-ONLY.`;alert($('status').textContent)"""
+          newstatus="""$('status').textContent=`Trap.NZ sync complete — ${DATA.traps.length.toLocaleString()} traps • ${DATA.monitoring.length.toLocaleString()} monitoring • ${DATA.lines.length.toLocaleString()} lines • ${DATA.records.length.toLocaleString()} trap records. READ-ONLY.`;alert($('status').textContent)"""
+          if oldstatus not in s:
+              raise SystemExit('status not found')
+          s=s.replace(oldstatus,newstatus,1)
+          s=s.replace('save();selectedLine=','await save();selectedLine=',1)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Improve Trap.NZ trap record matching'
+          git push
