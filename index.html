@@ -29,8 +29,27 @@
 const DATA={traps:[],monitoring:[],lines:[]};
 let map,selectedLine='',selectedTrap='';
 const $=id=>document.getElementById(id);
-function save(){localStorage.setItem('kp_traps',JSON.stringify(DATA.traps));localStorage.setItem('kp_monitoring',JSON.stringify(DATA.monitoring));localStorage.setItem('kp_lines',JSON.stringify(DATA.lines))}
-function load(){try{DATA.traps=JSON.parse(localStorage.getItem('kp_traps')||'[]')}catch{}try{DATA.monitoring=JSON.parse(localStorage.getItem('kp_monitoring')||'[]')}catch{}try{DATA.lines=JSON.parse(localStorage.getItem('kp_lines')||'[]')}catch{}}
+/* Kaitiaki IndexedDB storage v1 */
+const KP_DB='kaitiaki_pest_db', KP_STORE='data';
+function kpDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(KP_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(KP_STORE);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+async function save(){
+  try{
+    const db=await kpDB(),tx=db.transaction(KP_STORE,'readwrite'),st=tx.objectStore(KP_STORE);
+    st.put(DATA.traps,'traps');st.put(DATA.monitoring,'monitoring');st.put(DATA.lines,'lines');
+    await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)});
+    db.close();
+  }catch(e){console.error('IndexedDB save failed',e);}
+}
+async function load(){
+try{
+  const db=await kpDB(),tx=db.transaction(KP_STORE,'readonly'),st=tx.objectStore(KP_STORE);
+  const get=k=>new Promise((resolve,reject)=>{const r=st.get(k);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
+  const [traps,monitoring,lines]=await Promise.all([get('traps'),get('monitoring'),get('lines')]);
+  if(Array.isArray(traps))DATA.traps=traps;if(Array.isArray(monitoring))DATA.monitoring=monitoring;if(Array.isArray(lines))DATA.lines=lines;
+  db.close();
+  if(map){update();map.fitBounds(bounds(),{padding:40})}
+}catch(e){console.error('IndexedDB load failed',e);}
+}
 load();
 function bounds(){let pts=[];DATA.lines.forEach(l=>(l.points||[]).forEach(p=>pts.push(p)));DATA.traps.forEach(t=>pts.push([+t.lon,+t.lat]));DATA.monitoring.forEach(m=>pts.push([+m.lon,+m.lat]));pts=pts.filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1]));if(!pts.length)return [[177.0,-38.02],[177.08,-37.97]];let a=pts.map(p=>p[0]),b=pts.map(p=>p[1]),pad=Math.max(Math.max(...a)-Math.min(...a),Math.max(...b)-Math.min(...b))*.05||.001;return [[Math.min(...a)-pad,Math.min(...b)-pad],[Math.max(...a)+pad,Math.max(...b)+pad]]}
 function osm(){return{version:8,sources:{base:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}},layers:[{id:'base',type:'raster',source:'base'}]}}
