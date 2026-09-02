@@ -1,0 +1,57 @@
+name: Fix large Trap.NZ storage
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch index.html storage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text()
+          if 'Kaitiaki IndexedDB storage v1' in s:
+              raise SystemExit(0)
+          old_save = "function save(){localStorage.setItem('kp_traps',JSON.stringify(DATA.traps));localStorage.setItem('kp_monitoring',JSON.stringify(DATA.monitoring));localStorage.setItem('kp_lines',JSON.stringify(DATA.lines))}"
+          new_save = r'''/* Kaitiaki IndexedDB storage v1 */
+          const KP_DB='kaitiaki_pest_db', KP_STORE='data';
+          function kpDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(KP_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(KP_STORE);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+          async function save(){
+            try{
+              const db=await kpDB(),tx=db.transaction(KP_STORE,'readwrite'),st=tx.objectStore(KP_STORE);
+              st.put(DATA.traps,'traps');st.put(DATA.monitoring,'monitoring');st.put(DATA.lines,'lines');
+              await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)});
+              db.close();
+            }catch(e){console.error('IndexedDB save failed',e);}
+          }'''.strip()
+          if old_save not in s:
+              raise SystemExit('save function not found')
+          s=s.replace(old_save,new_save,1)
+          old_load = "function load(){try{DATA.traps=JSON.parse(localStorage.getItem('kp_traps')||'[]')}catch{}try{DATA.monitoring=JSON.parse(localStorage.getItem('kp_monitoring')||'[]')}catch{}try{DATA.lines=JSON.parse(localStorage.getItem('kp_lines')||'[]')}catch{}}"
+          new_load = r'''async function load(){
+          try{
+            const db=await kpDB(),tx=db.transaction(KP_STORE,'readonly'),st=tx.objectStore(KP_STORE);
+            const get=k=>new Promise((resolve,reject)=>{const r=st.get(k);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
+            const [traps,monitoring,lines]=await Promise.all([get('traps'),get('monitoring'),get('lines')]);
+            if(Array.isArray(traps))DATA.traps=traps;if(Array.isArray(monitoring))DATA.monitoring=monitoring;if(Array.isArray(lines))DATA.lines=lines;
+            db.close();
+            if(map){update();map.fitBounds(bounds(),{padding:40})}
+          }catch(e){console.error('IndexedDB load failed',e);}
+          }'''.strip()
+          if old_load not in s:
+              raise SystemExit('load function not found')
+          s=s.replace(old_load,new_load,1)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Use IndexedDB for large Trap.NZ data'
+          git push
