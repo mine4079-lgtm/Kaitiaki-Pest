@@ -1,0 +1,52 @@
+name: Add trap history
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch index.html
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html'); s=p.read_text()
+          if 'Kaitiaki Trap History v1' in s: raise SystemExit(0)
+          s=s.replace("const DATA={traps:[],monitoring:[],lines:[]};", "const DATA={traps:[],monitoring:[],lines:[],records:[]};\n/* Kaitiaki Trap History v1 */")
+          s=s.replace("st.put(DATA.lines,'lines');", "st.put(DATA.lines,'lines');st.put(DATA.records,'records');")
+          s=s.replace("const [traps,monitoring,lines]=await Promise.all([get('traps'),get('monitoring'),get('lines')]);", "const [traps,monitoring,lines,records]=await Promise.all([get('traps'),get('monitoring'),get('lines'),get('records')]);")
+          s=s.replace("if(Array.isArray(lines))DATA.lines=lines;", "if(Array.isArray(lines))DATA.lines=lines;if(Array.isArray(records))DATA.records=records;")
+          marker="function popup(p){"
+          history=r'''function trapHistoryHtml(trap){
+          const code=String(trap.title||trap.id||'').trim();
+          const rows=DATA.records.filter(r=>String(r.trap_code||'').trim().toLowerCase()===code.toLowerCase()).sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||'')));
+          if(!rows.length)return '<p class="hint">No monitoring records found for this trap.</p>';
+          return `<div class="history"><b>Monitoring history (${rows.length})</b>${rows.slice(0,20).map(r=>`<div class="history-row"><b>${esc(r.record_date||'')}</b><span>${esc(r.species_caught||'No catch')}</span><span>${esc(r.trap_status||'')}</span><span>${esc(r.recorded_by||'')}</span>${r.strikes!==undefined?`<span>Strikes: ${esc(r.strikes)}</span>`:''}${r.record_notes?`<span>${esc(r.record_notes)}</span>`:''}</div>`).join('')}${rows.length>20?`<div class="hint">Showing latest 20 records.</div>`:''}</div>`;
+          }
+          function popup(p){'''
+          s=s.replace(marker,history,1)
+          old="let el=document.createElement('div');el.className='popup';el.innerHTML=`<h3>${esc(c.title||c.name||c.id)}</h3><p><b>Type:</b> ${esc(c.type||'')}</p><p><b>Line:</b> ${esc(c.line||'—')}</p><p><b>GPS:</b> ${lat.toFixed(6)}, ${lon.toFixed(6)}</p>${details?`<div class=\"details\">${details}</div>`:''}<button class=\"nav\" onclick=\"location.href='https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}'\">Navigate</button>`;"
+          new="let el=document.createElement('div');el.className='popup';el.innerHTML=`<h3>${esc(c.title||c.name||c.id)}</h3><p><b>Type:</b> ${esc(c.type||'')}</p><p><b>Line:</b> ${esc(c.line||'—')}</p><p><b>GPS:</b> ${lat.toFixed(6)}, ${lon.toFixed(6)}</p>${details?`<div class=\"details\">${details}</div>`:''}${p.kind==='trap'?trapHistoryHtml(c):''}<button class=\"nav\" onclick=\"location.href='https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}'\">Navigate</button>`;"
+          if old not in s: raise SystemExit('popup target not found')
+          s=s.replace(old,new,1)
+          s=s.replace(".hint{font-size:12px;color:#64748b}", ".hint{font-size:12px;color:#64748b}.history{margin:10px 0;border-top:1px solid #ddd;padding-top:8px;max-height:260px;overflow:auto}.history-row{display:flex;flex-direction:column;gap:2px;padding:8px 0;border-bottom:1px solid #eee;font-size:11px}.history-row span{color:#334155}")
+          oldfeed="let[tf,mf,lf]=await Promise.all([all('trapnz-projects:default-project-traps'),all('trapnz-projects:default-project-monitoring-stations'),all('trapnz-projects:default-project-lines')]);"
+          newfeed="let[tf,mf,lf,rf]=await Promise.all([all('trapnz-projects:default-project-traps'),all('trapnz-projects:default-project-monitoring-stations'),all('trapnz-projects:default-project-lines'),all('trapnz-projects:default-project-trap-records')]);"
+          if oldfeed not in s: raise SystemExit('feed target not found')
+          s=s.replace(oldfeed,newfeed,1)
+          insert="DATA.lines=[];lf.forEach(f=>{"
+          rec="DATA.records=rf.map(f=>{let p=f.properties||{};return{trap_code:String(p.trap_code??''),trap_type:String(p.trap_type??''),trap_status:String(p.trap_status??''),trap_condition:String(p.trap_condition??''),rebaited:p.rebaited,bait_at_arrival:String(p.bait_at_arrival??''),bait_at_departure:String(p.bait_at_departure??''),strikes:p.strikes,species_caught:String(p.species_caught??''),gender:String(p.gender??''),maturity:String(p.maturity??''),record_date:String(p.record_date??''),recorded_by:String(p.recorded_by??''),record_notes:String(p.record_notes??''),prev_record_date:String(p.prev_record_date??''),next_record_date:String(p.next_record_date??'')}});\n          DATA.lines=[];lf.forEach(f=>{"
+          if insert not in s: raise SystemExit('line target not found')
+          s=s.replace(insert,rec,1)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Add Trap.NZ monitoring history to trap cards'
+          git push
