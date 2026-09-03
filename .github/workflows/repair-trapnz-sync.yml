@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Fix Trap.NZ project default
+      - name: Fix Trap.NZ project default and initial layer redraw
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -29,6 +29,10 @@ jobs:
           if old2 not in s:
               raise SystemExit('project prompt text not found')
           s = s.replace(old2, new2, 1)
+          fix = '''<script>\n(function(){\n  function redrawInitialLayers(){\n    var c=document.getElementById('counts'),n=document.getElementById('showMonNames');\n    if(!c||!n)return;\n    var m=c.textContent.match(/([0-9,]+) traps/);\n    if(!m||parseInt(m[1].replace(/,/g,''),10)<=0)return;\n    n.click(); n.click();\n    if(window.L){var el=document.getElementById('map');if(el&&el._leaflet_id&&window.dispatchEvent)window.dispatchEvent(new Event('resize'));}\n    return true;\n  }\n  var tries=0,t=setInterval(function(){if(redrawInitialLayers()||++tries>30)clearInterval(t)},500);\n})();\n</script>'''
+          marker='</body>'
+          if fix not in s:
+              s=s.replace(marker,fix+marker,1)
           p.write_text(s)
           PY
       - name: Commit repair
@@ -37,5 +41,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
           git diff --cached --quiet && exit 0
-          git commit -m 'fix: restore Trap.NZ project ID [skip ci]'
+          git commit -m 'fix: redraw trap numbers after initial Trap.NZ load [skip ci]'
           git push
