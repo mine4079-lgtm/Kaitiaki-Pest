@@ -1,6 +1,5 @@
-/* Kaitiaki-Pest trap information popup v2
-   Replaces the basic popup with the full Trap.NZ information available
-   in the synced feature properties, plus monitoring history.
+/* Kaitiaki-Pest trap information popup v3
+   Full Trap.NZ information + monitoring history + total possum catches.
 */
 (function(){
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -20,9 +19,21 @@
     return arr.filter(r=>codes.includes(String(val(r,'trap_code','trapCode','trap_id','trapId','trap_name','trapName','code','name')).trim().toLowerCase()))
       .sort((a,b)=>String(val(b,'record_date','recordDate','date','created_at')).localeCompare(String(val(a,'record_date','recordDate','date','created_at'))));
   }
+  function possumCount(rows){
+    return rows.reduce((total,r)=>{
+      const species=String(val(r,'species_caught','speciesCaught','species','catch')).trim().toLowerCase();
+      if(!species.includes('possum'))return total;
+      const n=val(r,'number_caught','numberCaught','count_caught','count','quantity');
+      const parsed=Number(n);
+      return total+(Number.isFinite(parsed)&&parsed>0?parsed:1);
+    },0);
+  }
   function history(t){
-    const rows=recordsFor(t); if(!rows.length)return '<div class="history"><b>Monitoring history</b><div class="hint">No monitoring records found for this trap.</div></div>';
-    return '<div class="history"><b>Monitoring history ('+rows.length+')</b>'+rows.slice(0,50).map(r=>{
+    const rows=recordsFor(t);
+    const possums=possumCount(rows);
+    const summary='<div class="details" style="margin-top:8px"><div class="detail"><b>Possum catches:</b><span>'+possums.toLocaleString()+'</span></div></div>';
+    if(!rows.length)return '<div class="history"><b>Monitoring history</b>'+summary+'<div class="hint">No monitoring records found for this trap.</div></div>';
+    return '<div class="history"><b>Monitoring history ('+rows.length+')</b>'+summary+rows.slice(0,50).map(r=>{
       const date=val(r,'record_date','recordDate','date'),species=val(r,'species_caught','speciesCaught','species','catch');
       const status=val(r,'trap_status','trapStatus','status'),condition=val(r,'trap_condition','trapCondition','condition');
       const bait=val(r,'bait_at_arrival','baitArrival','bait'),strikes=val(r,'strikes'),by=val(r,'recorded_by','recordedBy','operator','user_name'),notes=val(r,'record_notes','recordNotes','notes');
