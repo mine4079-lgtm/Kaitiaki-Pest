@@ -1,0 +1,41 @@
+name: Repair TrapNZ sync
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix Trap.NZ project default
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text()
+          old = "var oldKey=localStorage.getItem('kp_trapnz_key')||'',oldProject=localStorage.getItem('kp_trapnz_project')||'',key=prompt('Enter your Trap.NZ map-feed API key. Read-only only.',oldKey);"
+          new = "var oldKey=localStorage.getItem('kp_trapnz_key')||'',oldProject='2846979',key=prompt('Enter your Trap.NZ map-feed API key. Read-only only.',oldKey);"
+          if old not in s:
+              raise SystemExit('target text not found')
+          s = s.replace(old, new, 1)
+          old2 = "var project=prompt('Enter your Trap.NZ project ID.',oldProject);if(!project||!/^[0-9]+$/.test(project.trim()))return alert('Valid Trap.NZ project ID required.');"
+          new2 = "var project=oldProject;if(!project||!/^[0-9]+$/.test(project.trim()))return alert('Valid Trap.NZ project ID required.');"
+          if old2 not in s:
+              raise SystemExit('project prompt text not found')
+          s = s.replace(old2, new2, 1)
+          p.write_text(s)
+          PY
+      - name: Commit repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: restore Trap.NZ project ID [skip ci]'
+          git push
