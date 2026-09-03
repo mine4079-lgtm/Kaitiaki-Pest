@@ -1,0 +1,34 @@
+name: Load trap history UI
+on:
+  push:
+    paths:
+      - 'trap-history.js'
+      - '.github/workflows/inject-history.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  inject:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inject history script
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          tag='<script src="./trap-history.js"></script>'
+          if tag not in s:
+              marker='</body>'
+              if marker not in s: raise SystemExit('body marker not found')
+              s=s.replace(marker,tag+'\n'+marker,1)
+              p.write_text(s)
+          PY
+      - name: Commit injection
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Load trap monitoring history UI'
+          git push
