@@ -1,29 +1,19 @@
-/* Kaitiaki-Pest map labels v1 */
+/* Kaitiaki-Pest clean map labels v2
+   HTML overlay is used so labels work on the raster Street/Satellite maps
+   without relying on a glyph/font service.
+*/
 (function(){
-  function addLabels(){
-    if(!window.map || !window.map.isStyleLoaded() || !window.map.getSource('kp')) return false;
-    const m=window.map;
-    const add=(id,layer)=>{if(!m.getLayer(id))m.addLayer(layer)};
-    ['labels','line-labels','trap-labels','mon-labels'].forEach(id=>{if(id==='labels'&&m.getLayer(id))m.removeLayer(id)});
-    add('line-labels',{id:'line-labels',type:'symbol',source:'kp',filter:['==',['get','kind'],'line'],layout:{'symbol-placement':'line','text-field':['get','name'],'text-size':['interpolate',['linear'],['zoom'],10,9,14,12,18,15],'text-offset':[0,0.6],'text-allow-overlap':false,'text-ignore-placement':false},paint:{'text-color':'#17324d','text-halo-color':'#fff','text-halo-width':2}});
-    add('trap-labels',{id:'trap-labels',type:'symbol',source:'kp',filter:['==',['get','kind'],'trap'],minzoom:13,layout:{'text-field':['get','name'],'text-size':['interpolate',['linear'],['zoom'],13,9,17,12,20,14],'text-offset':[0,1.1],'text-anchor':'top','text-allow-overlap':false,'text-ignore-placement':false},paint:{'text-color':'#126b32','text-halo-color':'#fff','text-halo-width':2}});
-    add('mon-labels',{id:'mon-labels',type:'symbol',source:'kp',filter:['==',['get','kind'],'monitoring'],minzoom:13,layout:{'text-field':['get','name'],'text-size':['interpolate',['linear'],['zoom'],13,9,17,12,20,14],'text-offset':[0,1.1],'text-anchor':'top','text-allow-overlap':false,'text-ignore-placement':false},paint:{'text-color':'#8a5200','text-halo-color':'#fff','text-halo-width':2}});
-    addLabelToggle();
-    return true;
-  }
-  function addLabelToggle(){
-    if(document.getElementById('showLabels')) return;
-    const layers=document.getElementById('showLines');
-    if(!layers||!layers.parentElement)return;
-    const lab=document.createElement('label');
-    lab.innerHTML='<input id="showLabels" type="checkbox" checked> Labels';
-    layers.parentElement.appendChild(lab);
-    document.getElementById('showLabels').addEventListener('change',()=>setVisible(document.getElementById('showLabels').checked));
-  }
-  function setVisible(on){
-    if(!window.map)return;
-    ['line-labels','trap-labels','mon-labels'].forEach(id=>{if(window.map.getLayer(id))window.map.setLayoutProperty(id,'visibility',on?'visible':'none')});
-  }
-  const timer=setInterval(()=>{if(addLabels())clearInterval(timer)},500);
-  window.KaitiakiLabels={refresh:addLabels,setVisible:setVisible};
+  let overlay=null,visible=true,lastKey='',raf=0;
+  function getMap(){try{return (typeof map!=='undefined'&&map)||window.map||null}catch(e){return window.map||null}}
+  function ensureOverlay(m){if(!m||!m.getCanvasContainer)return null;const host=m.getCanvasContainer();if(!overlay||overlay.parentElement!==host){overlay=document.createElement('div');overlay.id='kp-label-overlay';Object.assign(overlay.style,{position:'absolute',inset:'0',pointerEvents:'none',zIndex:'2',overflow:'hidden'});host.appendChild(overlay)}return overlay}
+  function clear(){if(overlay)overlay.replaceChildren();lastKey=''}
+  function addLabel(text,x,y,kind){const d=document.createElement('div');d.className='kp-map-label kp-'+kind;d.textContent=text;Object.assign(d.style,{position:'absolute',left:x+'px',top:y+'px',transform:'translate(-50%,-50%)',whiteSpace:'nowrap',fontFamily:'system-ui,-apple-system,Segoe UI,sans-serif',fontWeight:'700',fontSize:kind==='line'?'11px':'10px',lineHeight:'1',padding:kind==='line'?'2px 4px':'1px 3px',borderRadius:'3px',background:kind==='line'?'rgba(255,255,255,.78)':'rgba(255,255,255,.88)',color:kind==='line'?'#17324d':kind==='mon'?'#8a5200':'#126b32',textShadow:'0 1px 0 #fff',boxShadow:kind==='line'?'0 1px 3px rgba(0,0,0,.18)':'0 1px 2px rgba(0,0,0,.12)'});overlay.appendChild(d)}
+  function overlaps(a,b){return !(a.right<b.left||a.left>b.right||a.bottom<b.top||a.top>b.bottom)}
+  function render(){const m=getMap();if(!m||!m.isStyleLoaded||!m.isStyleLoaded()||!visible){if(overlay)clear();return}const o=ensureOverlay(m);if(!o)return;if(m.getZoom()<12){clear();return}const traps=m.getLayer('traps')?m.queryRenderedFeatures({layers:['traps']}):[],mons=m.getLayer('mon')?m.queryRenderedFeatures({layers:['mon']}):[],lines=m.getLayer('lines')?m.queryRenderedFeatures({layers:['lines']}):[];const key=[m.getZoom().toFixed(2),traps.length,mons.length,lines.length,visible].join('|');if(key===lastKey)return;lastKey=key;o.replaceChildren();const lineSeen=new Set();lines.forEach(f=>{const name=String(f.properties?.name||'').trim();if(!name||lineSeen.has(name))return;lineSeen.add(name);const g=f.geometry;let c=null;if(g?.type==='LineString'&&g.coordinates?.length)c=g.coordinates[Math.floor(g.coordinates.length/2)];if(!c&&g?.type==='MultiLineString'&&g.coordinates?.[0]?.length){const a=g.coordinates[0];c=a[Math.floor(a.length/2)]}if(!c)return;const p=m.project(c);if(p.x<0||p.y<0||p.x>m.getContainer().clientWidth||p.y>m.getContainer().clientHeight)return;addLabel(name,p.x,p.y,'line')});const candidates=[];traps.forEach(f=>{const n=String(f.properties?.name||f.properties?.id||'').trim();if(n)candidates.push({f,n,kind:'trap',priority:1})});mons.forEach(f=>{const n=String(f.properties?.name||f.properties?.id||'').trim();if(n)candidates.push({f,n,kind:'mon',priority:2})});candidates.sort((a,b)=>a.priority-b.priority||a.n.localeCompare(b.n));const placed=[],max=m.getZoom()>=16?450:m.getZoom()>=14?280:170;for(const c of candidates){if(placed.length>=max)break;const coord=c.f.geometry?.type==='Point'?c.f.geometry.coordinates:null;if(!coord)continue;const p=m.project(coord);if(p.x<0||p.y<0||p.x>m.getContainer().clientWidth||p.y>m.getContainer().clientHeight)continue;const w=Math.max(24,c.n.length*6+8),h=16,box={left:p.x-w/2,right:p.x+w/2,top:p.y-h/2,bottom:p.y+h/2},gap=m.getZoom()<14?7:3,test={left:box.left-gap,right:box.right+gap,top:box.top-gap,bottom:box.bottom+gap};if(placed.some(b=>overlaps(test,b)))continue;placed.push(box);addLabel(c.n,p.x,p.y+10,c.kind)}}
+  function schedule(){cancelAnimationFrame(raf);raf=requestAnimationFrame(render)}
+  function setVisible(on){visible=!!on;schedule()}
+  function addToggle(){if(document.getElementById('showLabels'))return;const layers=document.getElementById('showLines');if(!layers?.parentElement)return;const lab=document.createElement('label');lab.innerHTML='<input id="showLabels" type="checkbox" checked> Labels';layers.parentElement.appendChild(lab);lab.querySelector('input').addEventListener('change',e=>setVisible(e.target.checked))}
+  function cleanupOldLayers(m){['labels','line-labels','trap-labels','mon-labels'].forEach(id=>{try{if(m.getLayer(id))m.removeLayer(id)}catch(e){}})}
+  function init(){const m=getMap();if(!m)return false;ensureOverlay(m);cleanupOldLayers(m);addToggle();if(!m.__kpCleanLabels){m.__kpCleanLabels=true;m.on('move',schedule);m.on('zoom',schedule);m.on('render',schedule);m.on('load',schedule);m.on('style.load',()=>{ensureOverlay(m);cleanupOldLayers(m);schedule()})}schedule();return true}
+  const timer=setInterval(()=>{if(init())clearInterval(timer)},250);window.KaitiakiLabels={refresh:init,setVisible:setVisible};
 })();
