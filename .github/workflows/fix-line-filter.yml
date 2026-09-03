@@ -1,0 +1,39 @@
+name: Fix trap line filtering
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-line-filter.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch line filter
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          old="function geo(){let fs=[],line=$('line').value,tt=$('trapType').value,mt=$('monType').value,q=$('search').value.trim().toLowerCase();"
+          start=s.find(old)
+          if start<0:
+              raise SystemExit('geo function not found')
+          end=s.find('\nfunction layers()', start)
+          if end<0:
+              raise SystemExit('geo function end not found')
+          new="""function normLine(v){return String(v??'').trim().toLowerCase().replace(/\\s+/g,' ')}
+function trapLine(t){return String(t.line??t.line_name??t.lineName??t.trap_line??t.trapLine??t.properties?.line??t.properties?.line_name??'').trim()}
+function monLine(m){return String(m.line??m.line_name??m.lineName??m.monitoring_line??m.properties?.line??m.properties?.line_name??'').trim()}
+function geo(){let fs=[],line=$('line').value,tt=$('trapType').value,mt=$('monType').value,q=$('search').value.trim().toLowerCase(),wantedLine=normLine(line);if($('showLines').checked)DATA.lines.forEach(l=>{if(wantedLine&&normLine(l.name)!==wantedLine)return;fs.push({type:'Feature',geometry:{type:'LineString',coordinates:l.points},properties:{kind:'line',name:l.name||''}})});if($('showTraps').checked)DATA.traps.forEach(t=>{let tl=trapLine(t);if(wantedLine&&normLine(tl)!==wantedLine||tt&&t.type!==tt)return;let s=[t.id,t.title,tl,t.type].join(' ').toLowerCase();if(q&&!s.includes(q))return;fs.push({type:'Feature',geometry:{type:'Point',coordinates:[+t.lon,+t.lat]},properties:{kind:'trap',id:String(t.id||''),name:String(t.title||t.id||''),line:tl,type:String(t.type||'Trap')}})});if($('showMon').checked)DATA.monitoring.forEach(m=>{let ml=monLine(m);if(wantedLine&&normLine(ml)!==wantedLine||mt&&m.type!==mt)return;let s=[m.id,m.name,m.code,ml,m.type].join(' ').toLowerCase();if(q&&!s.includes(q))return;fs.push({type:'Feature',geometry:{type:'Point',coordinates:[+m.lon,+m.lat]},properties:{kind:'monitoring',id:String(m.id||''),name:String(m.name||m.code||m.id||''),line:ml,type:String(m.type||'Monitoring')}})});return{type:'FeatureCollection',features:fs}}"""
+          p.write_text(s[:start]+new+s[end:])
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Fix trap filtering by line name'
+          git push
