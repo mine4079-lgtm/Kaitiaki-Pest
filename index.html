@@ -313,4 +313,78 @@ $('filterBtn').onclick=function(){$('drawer').classList.add('open')};$('close').
 })();
 </script>
 <!-- KAITIAKI FINAL FILTER CONTROLLER -->
+<!-- KAITIAKI INDEPENDENT MONITORING FILTERS v2 -->
+<script>
+(function(){
+  var state=window.KPFilterState=window.KPFilterState||{trap:[],line:[],mon:[],status:['active'],ready:{trap:false,line:false,mon:false,status:false}};
+  function sel(kind){return document.getElementById(kind==='trap'?'trapType':kind==='line'?'line':kind==='mon'?'monType':'trapStatus');}
+  function box(kind){return document.getElementById(kind==='trap'?'mfTraps':kind==='line'?'mfLines':kind==='mon'?'mfMons':'mfStatus');}
+  function norm(v){return String(v==null?'':v).trim().toLowerCase().replace(/[_-]+/g,' ').replace(/\\s+/g,' ')}
+  function monValue(type){
+    var t=norm(type);
+    if(t.indexOf('waxtag')>=0||t.indexOf('wax tag')>=0||(t.indexOf('wax')>=0&&t.indexOf('tag')>=0))return '__wax_tags__';
+    if(t.indexOf('camera')>=0)return '__camera__';
+    return String(type==null?'':type);
+  }
+  function monLabel(v){
+    if(v==='__wax_tags__')return 'Wax tags';
+    if(v==='__camera__')return 'Camera';
+    return String(v||'Monitoring');
+  }
+  window.KPMonFilterValue=function(m){return monValue(m&&m.type)};
+  function fire(kind){
+    var el=sel(kind);if(!el)return;
+    el.value=state[kind].length===1&&!/^__/.test(state[kind][0])?state[kind][0]:'';
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  function row(parent,value,label,checked,changed){
+    var r=document.createElement('label');r.className='mfRow';
+    var sp=document.createElement('span');sp.textContent=label;
+    var cb=document.createElement('input');cb.type='checkbox';cb.checked=checked;cb.dataset.filterValue=value;cb.addEventListener('change',changed);
+    r.appendChild(sp);r.appendChild(cb);parent.appendChild(r);
+  }
+  function buildStatus(){
+    var b=box('status');if(!b)return;b.innerHTML='';if(!state.status.length)state.status=['active'];
+    [['active','Active'],['retired','Retired'],['disabled','Disabled']].forEach(function(o){
+      row(b,o[0],o[1],state.status.indexOf(o[0])>=0,function(){
+        if(this.checked){if(state.status.indexOf(o[0])<0)state.status.push(o[0]);}
+        else state.status=state.status.filter(function(x){return x!==o[0]});
+        if(!state.status.length)state.status=['active'];fire('status');
+      });
+    });
+  }
+  function buildSimple(kind){
+    var b=box(kind),el=sel(kind);if(!b||!el)return;b.innerHTML='';
+    Array.prototype.slice.call(el.options).filter(function(o){return o.value}).forEach(function(o){
+      row(b,o.value,o.text,state[kind].indexOf(o.value)>=0,function(){
+        if(this.checked){if(state[kind].indexOf(o.value)<0)state[kind].push(o.value)}
+        else state[kind]=state[kind].filter(function(x){return x!==o.value});
+        fire(kind);
+      });
+    });
+  }
+  function buildMonitoring(){
+    var b=box('mon');if(!b)return;b.innerHTML='';var vals=[],seen={};
+    function add(v,label){var key=String(v).toLowerCase();if(seen[key])return;seen[key]=1;vals.push([v,label]);}
+    add('__wax_tags__','Wax tags');add('__camera__','Camera');
+    var el=sel('mon');
+    if(el)Array.prototype.slice.call(el.options).filter(function(o){return o.value}).forEach(function(o){var v=monValue(o.value);add(v,monLabel(v));});
+    vals.sort(function(a,b){var rank={'__wax_tags__':0,'__camera__':1};return (rank[a[0]]??9)-(rank[b[0]]??9)||a[1].localeCompare(b[1]);});
+    vals.forEach(function(o){
+      row(b,o[0],o[1],state.mon.indexOf(o[0])>=0,function(){
+        if(this.checked){if(state.mon.indexOf(o[0])<0)state.mon.push(o[0])}
+        else state.mon=state.mon.filter(function(x){return x!==o[0]});
+        fire('mon');
+      });
+    });
+  }
+  window.mfBuild=function(){buildSimple('trap');buildSimple('line');buildMonitoring();buildStatus()};
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('.mfHead button');if(!b)return;var g=b.closest('.mfGroup');if(!g)return;
+    e.preventDefault();g.classList.toggle('open');b.textContent=g.classList.contains('open')?'Hide types':'Show types';
+  });
+  setTimeout(function(){window.mfBuild()},350);
+})();
+</script>
 </body></html>
