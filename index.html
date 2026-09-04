@@ -121,4 +121,56 @@ $('filterBtn').onclick=function(){$('drawer').classList.add('open')};$('close').
 
 
 
+<script id="modern-filter-js">
+(function(){
+  function selFor(kind){return document.getElementById(kind==='line'?'line':kind==='trap'?'trapType':'monType')}
+  function fire(sel){
+    if(!sel)return;
+    sel.dispatchEvent(new Event('change',{bubbles:true}));
+    sel.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  function build(kind,id){
+    var box=document.getElementById(id),sel=selFor(kind);
+    if(!box||!sel)return;
+    var current=sel.value;
+    box.innerHTML='';
+    Array.prototype.slice.call(sel.options).forEach(function(o){
+      if(!o.value)return;
+      var row=document.createElement('label'); row.className='mfRow';
+      var span=document.createElement('span'); span.textContent=o.text;
+      var cb=document.createElement('input'); cb.type='checkbox'; cb.checked=(current===o.value); cb.dataset.value=o.value;
+      cb.addEventListener('change',function(){
+        if(cb.checked){
+          sel.value=o.value;
+          Array.prototype.slice.call(box.querySelectorAll('input')).forEach(function(x){if(x!==cb)x.checked=false});
+        }else if(sel.value===o.value){sel.value='';}
+        fire(sel);
+      });
+      row.appendChild(span); row.appendChild(cb); box.appendChild(row);
+    });
+  }
+  window.mfBuild=function(){build('trap','mfTraps');build('line','mfLines');build('mon','mfMons');};
+  function syncVisibility(){
+    var t=document.getElementById('showTraps'),m=document.getElementById('showMon'),l=document.getElementById('showLines');
+    var tt=document.getElementById('mfTrapsToggle');
+    if(tt&&t)tt.checked=t.checked;
+    if(tt&&t)tt.onchange=function(){t.checked=tt.checked;fire(t);};
+    ['mfBait','mfPoi','mfSensor'].forEach(function(id){var x=document.getElementById(id);if(x)x.addEventListener('change',function(){})});
+  }
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('.mfHead button');
+    if(!b)return;
+    e.preventDefault();
+    var g=b.closest('.mfGroup');
+    if(!g)return;
+    g.classList.toggle('open');
+    b.textContent=g.classList.contains('open')?'Hide types':'Show types';
+  });
+  document.addEventListener('change',function(e){
+    if(e.target.matches('#line,#trapType,#monType'))setTimeout(window.mfBuild,0);
+  });
+  window.mfBuild(); syncVisibility();
+  setTimeout(window.mfBuild,300);setTimeout(window.mfBuild,1200);setTimeout(window.mfBuild,2500);
+})();
+</script>
 </body></html>
