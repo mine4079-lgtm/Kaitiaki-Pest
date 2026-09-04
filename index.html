@@ -56,7 +56,7 @@ function pass(t,f,mon){if(f.line&&t.line!==f.line)return false;var k=mon?'monTyp
 function showTrap(t){var s=statsFor(t),rows=s.rows,details='<div class="detail"><b>Trap number:</b><span>'+esc(trapCode(t))+'</span></div><div class="detail"><b>Type:</b><span>'+esc(t.type||'—')+'</span></div><div class="detail"><b>Line:</b><span>'+esc(t.line||'—')+'</span></div><div class="detail"><b>GPS:</b><span>'+t.lat.toFixed(6)+', '+t.lon.toFixed(6)+'</span></div><div class="detail"><b>Installed:</b><span>'+esc(t.installed||'—')+'</span></div><div class="detail"><b>Installed By:</b><span>'+esc(t.installedBy||'—')+'</span></div><div class="detail"><b>Sensor:</b><span>'+esc(t.sensorProvider||'—')+' '+esc(t.sensorId||'')+'</span></div><div class="detail"><b>Retired:</b><span>'+esc(t.retired||'0')+'</span></div>';var catches=Object.keys(s.by).map(function(k){return'<div class="stat"><b>'+s.by[k].toLocaleString()+'</b>'+esc(k)+' catches</div>'}).join('')||'<div class="stat"><b>0</b>Total catches</div>';var hist=rows.length?rows.map(function(r){return'<div class="historyrow"><strong>'+esc(new Date(recDate(r)).toLocaleString('en-NZ'))+'</strong><span>Catch: '+esc(recSpecies(r)||'None')+'</span><span>Status: '+esc(field(r,['trap_status','trapStatus','status'],'—'))+'</span><span>Condition: '+esc(field(r,['trap_condition','trapCondition','condition'],'—'))+'</span><span>Re-baited: '+esc(field(r,['rebaited'],'—'))+'</span><span>Recorded by: '+esc(field(r,['recorded_by','recordedBy','operator','user_name','username'],'—'))+'</span></div>'}).join(''):'<div class="hint">No monitoring records found for this trap.</div>';var nav='https://www.google.com/maps/dir/?api=1&destination='+t.lat+','+t.lon;L.popup({maxWidth:460}).setLatLng([t.lat,t.lon]).setContent('<div class="popupbox"><h3>'+esc(trapCode(t))+'</h3><div class="details">'+details+'</div><div class="summary"><div class="stat"><b>'+s.possums.toLocaleString()+'</b>Possum catches</div>'+catches+'</div><div class="history"><h4>Monitoring history ('+rows.length+')</h4>'+hist+'</div><a class="nav" target="_blank" rel="noopener" href="'+nav+'">Navigate</a></div>').openOn(map)}
 function populate(){var names=[].concat(DATA.lines.map(function(x){return x.name}),DATA.traps.map(function(x){return x.line}),DATA.monitoring.map(function(x){return x.line})).filter(Boolean).filter(function(x,i,a){return a.indexOf(x)===i}).sort(),l=$('line'),old=l.value;l.innerHTML='<option value="">All lines</option>';names.forEach(function(x){l.append(new Option(x,x))});if(names.indexOf(old)>=0)l.value=old;[['trapType',DATA.traps.map(function(x){return x.type}),'trap types'],['monType',DATA.monitoring.map(function(x){return x.type}),'monitoring types']].forEach(function(a){var el=$(a[0]),o=el.value;el.innerHTML='<option value="">All '+a[2]+'</option>';a[1].filter(Boolean).filter(function(x,i,v){return v.indexOf(x)===i}).sort().forEach(function(x){el.append(new Option(x,x))});if([].slice.call(el.options).some(function(x){return x.value===o}))el.value=o})}
 function render(){trapLayer.clearLayers();monLayer.clearLayers();lineLayer.clearLayers();labelLayer.clearLayers();var f=filters(),z=map.getZoom(),canvas=L.canvas({padding:.5});if($('showLines').checked)DATA.lines.forEach(function(l){if(f.line&&l.name!==f.line)return;var pl=L.polyline(l.points.map(function(x){return[x[1],x[0]]}),{color:l.colour||'#2563eb',weight:4,opacity:.9,renderer:canvas});pl.on('click',function(){$('line').value=l.name;update()});lineLayer.addLayer(pl);if($('showLineNames').checked&&z>=13&&l.points.length>1){var mid=l.points[Math.floor(l.points.length/2)];labelLayer.addLayer(L.marker([mid[1],mid[0]],{icon:L.divIcon({className:'label',html:esc(l.name),iconSize:null,iconAnchor:[0,0]}),interactive:false}))}});if($('showTraps').checked)DATA.traps.forEach(function(t){if(!pass(t,f,false))return;var m=L.circleMarker([t.lat,t.lon],{radius:z>=15?5:4,weight:2,fillOpacity:.9,opacity:1,color:'#fff',fillColor:'#16803c',renderer:canvas});m.on('click',function(){showTrap(t)});trapLayer.addLayer(m);if($('showNumbers').checked&&z>=15)labelLayer.addLayer(L.marker([t.lat,t.lon],{icon:L.divIcon({className:'label',html:esc(trapCode(t)),iconSize:null,iconAnchor:[12,-8]}),interactive:false}))});if($('showMon').checked&&z>=14)DATA.monitoring.forEach(function(m){if(!pass(m,f,true))return;if(z<15)return;var b=map.getBounds();if(!b.contains([m.lat,m.lon]))return;var mk=L.circleMarker([m.lat,m.lon],{radius:4,weight:2,fillOpacity:.9,opacity:1,color:'#fff',fillColor:'#f59e0b',renderer:canvas});mk.on('click',function(){L.popup().setLatLng([m.lat,m.lon]).setContent('<div class="popupbox"><h3>'+esc(field(m,['name','code','number','id'],'Monitoring'))+'</h3><div class="detail"><b>Type:</b><span>'+esc(m.type)+'</span></div><div class="detail"><b>Line:</b><span>'+esc(m.line||'—')+'</span></div><div class="detail"><b>GPS:</b><span>'+m.lat.toFixed(6)+', '+m.lon.toFixed(6)+'</span></div></div>').openOn(map)});monLayer.addLayer(mk);if($('showMonNames').checked&&z>=16)labelLayer.addLayer(L.marker([m.lat,m.lon],{icon:L.divIcon({className:'label',html:esc(field(m,['name','code','number','id'],'')),iconSize:null,iconAnchor:[12,-8]}),interactive:false}))});lineLayer.addTo(map);trapLayer.addTo(map);monLayer.addTo(map);labelLayer.addTo(map);$('counts').textContent=DATA.traps.length.toLocaleString()+' traps • '+DATA.monitoring.length.toLocaleString()+' monitoring • '+DATA.lines.length.toLocaleString()}
-function update(){render();populate();$('status').textContent=DATA.traps.length?'Trap.NZ data loaded — '+DATA.traps.length.toLocaleString()+' traps':'Map ready — sync Trap.NZ to load your project.'}
+function update(){populate();render();if(window.mfBuild)window.mfBuild();$('status').textContent=DATA.traps.length?'Trap.NZ data loaded — '+DATA.traps.length.toLocaleString()+' traps':'Map ready — sync Trap.NZ to load your project.'}
 async function db(){return new Promise(function(res,rej){var r=indexedDB.open('kaitiaki_pest_db_v5',1);r.onupgradeneeded=function(){r.result.createObjectStore('data')};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}})}
 async function saveData(){try{var d=await db(),tx=d.transaction('data','readwrite'),s=tx.objectStore('data');Object.keys(DATA).forEach(function(k){s.put(DATA[k],k)});await new Promise(function(r){tx.oncomplete=r});d.close()}catch(e){console.error(e)}}
 async function loadData(){try{var d=await db(),tx=d.transaction('data','readonly'),s=tx.objectStore('data');for(var k of Object.keys(DATA)){var v=await new Promise(function(res){var q=s.get(k);q.onsuccess=function(){res(q.result)};q.onerror=function(){res(null)}});if(Array.isArray(v))DATA[k]=v}d.close()}catch(e){console.error(e)}}
@@ -67,28 +67,34 @@ $('filterBtn').onclick=function(){$('drawer').classList.add('open')};$('close').
 </script>
 <script id="modern-filter-js">
 (function(){
-function mfBuild(){var root=document.getElementById('modernFilters');if(!root)return;function fill(id,sel,all){var box=document.getElementById(id);if(!box)return;box.innerHTML='';var opts=[].slice.call(document.querySelectorAll(sel+' option'));opts.forEach(function(o,i){var row=document.createElement('label');row.className='mfRow';var cb=document.createElement('input');cb.type='checkbox';cb.checked=(o.value===''?document.querySelector(sel).value==='':document.querySelector(sel).value===o.value);cb.dataset.value=o.value;cb.onchange=function(){var select=document.querySelector(sel);select.value=this.checked?this.dataset.value:'';select.dispatchEvent(new Event('change',{bubbles:true}));[].slice.call(box.querySelectorAll('input')).forEach(function(x){if(x!==cb)x.checked=false})};row.appendChild(document.createTextNode(o.textContent));row.appendChild(cb);box.appendChild(row)});}
-fill('mfLines','#line');fill('mfTraps','#trapType');fill('mfMons','#monType');
-[].slice.call(root.querySelectorAll('.mfHead button')).forEach(function(b){b.onclick=function(){b.parentElement.parentElement.classList.toggle('open')}});
-}
-var old=window.populateFilters;mfBuild();var mo=new MutationObserver(function(){mfBuild()});var d=document.getElementById('drawer');if(d)mo.observe(d,{childList:true,subtree:true});setTimeout(mfBuild,1000);setTimeout(mfBuild,2500);
+  function selectFor(kind){return document.getElementById(kind==='line'?'line':kind==='trap'?'trapType':'monType')}
+  function buildGroup(kind,id){
+    var box=document.getElementById(id),sel=selectFor(kind);if(!box||!sel)return;
+    box.innerHTML='';
+    Array.prototype.slice.call(sel.options).forEach(function(o){
+      if(!o.value)return;
+      var row=document.createElement('label');row.className='mfRow';row.setAttribute('data-kind',kind);
+      var span=document.createElement('span');span.textContent=o.text;
+      var cb=document.createElement('input');cb.type='checkbox';cb.checked=sel.value===o.value;cb.setAttribute('data-filter-value',o.value);
+      cb.addEventListener('change',function(){
+        sel.value=cb.checked?o.value:'';
+        Array.prototype.slice.call(box.querySelectorAll('input')).forEach(function(x){if(x!==cb)x.checked=false});
+        sel.dispatchEvent(new Event('change',{bubbles:true}));
+      });
+      row.appendChild(span);row.appendChild(cb);box.appendChild(row);
+    });
+  }
+  window.mfBuild=function(){buildGroup('line','mfLines');buildGroup('trap','mfTraps');buildGroup('mon','mfMons');};
+  function toggleGroup(btn){var g=btn.closest('.mfGroup');if(!g)return;g.classList.toggle('open');btn.textContent=g.classList.contains('open')?'Hide types':'Show types';}
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('.mfHead button');
+    if(b){e.preventDefault();toggleGroup(b);return;}
+  });
+  document.addEventListener('change',function(e){
+    if(e.target.matches('#line,#trapType,#monType'))window.mfBuild();
+  });
+  window.mfBuild();
+  setTimeout(window.mfBuild,300);
 })();
 </script>
-<script id="filter-interaction-patch">(function(){
-  function hiddenSelect(kind){return kind==='line'?document.getElementById('line'):kind==='trap'?document.getElementById('trapType'):document.getElementById('monType')}
-  function refreshGroup(kind){
-    var group=document.querySelector('.mfGroup[data-kind="'+kind+'"]'),body=group&&group.querySelector('.mfBody'),sel=hiddenSelect(kind);if(!body||!sel)return;
-    if(!body.children.length){Array.prototype.slice.call(sel.options).forEach(function(o){if(!o.value)return;var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o.text;var cb=document.createElement('input');cb.type='checkbox';cb.setAttribute('data-filter-value',o.value);row.appendChild(span);row.appendChild(cb);body.appendChild(row)})}
-    Array.prototype.slice.call(body.querySelectorAll('input[data-filter-value]')).forEach(function(cb){cb.checked=sel.value===cb.getAttribute('data-filter-value')})
-  }
-  function refreshAll(){refreshGroup('line');refreshGroup('trap');refreshGroup('mon')}
-  document.addEventListener('click',function(e){
-    var head=e.target.closest('.mfHead button');
-    if(head){var g=head.closest('.mfGroup');if(g){g.classList.toggle('open');head.textContent=g.classList.contains('open')?'Hide types':'Show types';refreshGroup(g.getAttribute('data-kind'))}e.preventDefault();return}
-    var cb=e.target.closest('.mfRow input[data-filter-value]');
-    if(cb){var g=cb.closest('.mfGroup'),kind=g&&g.getAttribute('data-kind'),sel=hiddenSelect(kind);if(sel){sel.value=cb.checked?cb.getAttribute('data-filter-value'):'';sel.dispatchEvent(new Event('change',{bubbles:true}))}Array.prototype.slice.call((g&&g.querySelectorAll('input[data-filter-value]'))||[]).forEach(function(x){if(x!==cb)x.checked=false});e.preventDefault()}
-  },true);
-  document.addEventListener('DOMContentLoaded',function(){refreshAll();setTimeout(refreshAll,500);setTimeout(refreshAll,1500);setTimeout(refreshAll,3000);setTimeout(refreshAll,6000)});
-  setInterval(refreshAll,5000)
-})();</script>
 </body></html>
