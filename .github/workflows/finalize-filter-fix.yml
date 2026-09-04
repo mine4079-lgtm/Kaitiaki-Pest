@@ -1,0 +1,97 @@
+name: Finalize map filter fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[final-filter-fix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply final filter controller
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+
+          marker="$('linzKey').value=localStorage.getItem('kp_linz_key')||'';"
+          if marker in s and 'window.KPUpdate=update' not in s:
+              s=s.replace(marker, marker+'window.DATA=DATA;window.KPUpdate=update;', 1)
+
+          # Remove any older conflicting controller appended by previous filter attempts.
+          s=re.sub(r'<!-- KAITIAKI INDEPENDENT MONITORING FILTERS v2 -->.*?</script>','',s,flags=re.S,count=1)
+
+          start=s.find('<script id="filter-interaction-patch">')
+          if start<0: raise SystemExit('filter-interaction-patch not found')
+          end=s.find('</script>',start)
+          if end<0: raise SystemExit('filter-interaction-patch closing tag not found')
+          end += len('</script>')
+
+          patch=r'''<script id="filter-interaction-patch">
+          (function(){
+            var st=window.KPFilterState={trap:[],line:[],mon:[],status:['active'],ready:{trap:true,line:true,mon:true,status:true}};
+            function body(k){return document.getElementById(k==='trap'?'mfTraps':k==='line'?'mfLines':k==='mon'?'mfMons':'mfStatus')}
+            function clean(v){return String(v==null?'':v).trim().toLowerCase().replace(/[ _-]+/g,' ')}
+            function rawMon(m){var a=[];['type','monitoring_type','monitoringType','name','code','number','tags','tag','sub_type','subtype','notes'].forEach(function(k){var v=m&&m[k];if(v!==undefined&&v!==null&&String(v).trim())a.push(String(v))});return a.join(' ')}
+            function monFilterValue(m){var t=clean(rawMon(m));if(t.indexOf('camera')>=0)return '__camera__';if(t.indexOf('wax')>=0)return '__wax_tags__';return String(m&&m.type||'Other')}
+            function monLabel(v){if(v==='__wax_tags__')return 'Wax tags';if(v==='__camera__')return 'Camera';return v||'Other'}
+            function unique(a){var out=[],seen={};a.forEach(function(v){v=String(v||'').trim();var k=v.toLowerCase();if(v&&!seen[k]){seen[k]=1;out.push(v)}});return out.sort(function(a,b){return a.localeCompare(b)})}
+            function options(k){
+              if(k==='status')return [['__all__','Show all'],['active','Active'],['retired','Retired'],['disabled','Disabled']];
+              if(k==='mon'){
+                var vals=[];
+                if(window.DATA&&Array.isArray(DATA.monitoring))DATA.monitoring.forEach(function(m){vals.push(monFilterValue(m))});
+                vals=unique(vals);
+                if(vals.indexOf('__wax_tags__')<0)vals.unshift('__wax_tags__');
+                if(vals.indexOf('__camera__')<0)vals.unshift('__camera__');
+                return [['__all__','Show all']].concat(vals.map(function(v){return [v,monLabel(v)]}));
+              }
+              var vals=[];
+              if(k==='trap'&&window.DATA&&Array.isArray(DATA.traps))DATA.traps.forEach(function(t){vals.push(t.type)});
+              if(k==='line'&&window.DATA&&Array.isArray(DATA.lines))DATA.lines.forEach(function(l){vals.push(l.name)});
+              return [['__all__','Show all']].concat(unique(vals).map(function(v){return [v,v]}));
+            }
+            function setSelected(k,v,checked){var a=st[k]||[];if(checked){if(a.indexOf(v)<0)a.push(v)}else a=a.filter(function(x){return x!==v});st[k]=a}
+            function build(k){
+              var b=body(k);if(!b)return;var opts=options(k),a=st[k]||[];b.innerHTML='';
+              opts.forEach(function(o){
+                var row=document.createElement('label');row.className='mfRow';
+                var span=document.createElement('span');span.textContent=o[1];
+                var cb=document.createElement('input');cb.type='checkbox';cb.dataset.filterValue=o[0];cb.checked=o[0]==='__all__'?a.length===0:a.indexOf(o[0])>=0;
+                cb.addEventListener('change',function(){
+                  if(o[0]==='__all__'&&cb.checked){st[k]=[];build(k);if(window.KPUpdate)window.KPUpdate();return}
+                  if(o[0]!=='__all__')setSelected(k,o[0],cb.checked);
+                  build(k);if(window.KPUpdate)window.KPUpdate();
+                });
+                row.appendChild(span);row.appendChild(cb);b.appendChild(row);
+              });
+            }
+            window.KPMonFilterValue=monFilterValue;
+            window.mfBuild=function(){build('trap');build('line');build('mon');build('status')};
+            document.addEventListener('click',function(e){var b=e.target.closest('.mfHead button');if(!b)return;var g=b.closest('.mfGroup');if(!g)return;e.preventDefault();g.classList.toggle('open');b.textContent=g.classList.contains('open')?'Hide types':'Show types';build(g.getAttribute('data-kind'))});
+            document.addEventListener('DOMContentLoaded',function(){window.mfBuild()});
+            setTimeout(function(){window.mfBuild()},300);
+          })();
+          </script>'''
+          s=s[:start]+patch+s[end:]
+          p.write_text(s,encoding='utf-8')
+          print('Final filter controller applied')
+          PY
+      - name: Commit final fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Finalize independent Camera and Wax tag filters [final-filter-fix]"
+          git push
