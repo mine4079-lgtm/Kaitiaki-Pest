@@ -1,0 +1,29 @@
+<!-- TrapNZ-style layer panel prototype. Kept separate from the working index.html. -->
+<div id="kp-trapnz-layers" style="font-family:system-ui,sans-serif;background:#fff;border-radius:12px;padding:12px;box-shadow:0 2px 10px #0002;max-width:320px">
+  <strong style="font-size:16px">Map layers</strong>
+  <div style="margin-top:10px">
+    <label><input type="checkbox" checked data-layer="traps"> Traps</label>
+    <details open style="margin:6px 0 8px 22px"><summary>Show types</summary>
+      <label><input type="checkbox" checked data-trap-status="active"> Active</label><br>
+      <label><input type="checkbox" data-trap-status="retired"> Retired</label><br>
+      <label><input type="checkbox" data-trap-status="disabled"> Disabled</label>
+    </details>
+  </div>
+  <div style="margin-top:8px">
+    <label><input type="checkbox" checked data-layer="monitoring"> Monitoring Sites</label>
+    <details style="margin:6px 0 8px 22px"><summary>Show types</summary>
+      <label><input type="checkbox" checked data-monitor-type="wax"> Wax tags</label><br>
+      <label><input type="checkbox" checked data-monitor-type="camera"> Camera</label>
+    </details>
+  </div>
+  <div style="margin-top:8px"><label><input type="checkbox" checked data-layer="lines"> Trap Lines</label></div>
+</div>
+<script>
+(function(){
+  var p=document.getElementById('kp-trapnz-layers'); if(!p)return;
+  p.addEventListener('change',function(e){
+    var t=e.target;
+    window.dispatchEvent(new CustomEvent('kaitiaki-layer-filter',{detail:{layer:t.dataset.layer||null,status:t.dataset.trapStatus||null,monitorType:t.dataset.monitorType||null,checked:t.checked}}));
+  });
+})();
+</script>
