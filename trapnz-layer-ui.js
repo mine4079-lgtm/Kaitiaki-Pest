@@ -1,8 +1,62 @@
 (function(){
 'use strict';
-/* Kaitiaki Pest — Trap.NZ-style filter polish/fix.
-   The main map owns the actual filter state/rendering. This file only improves
-   the filter UI and keeps the nested Show types controls reliable. */
+/* Kaitiaki Pest — Trap.NZ-style filter polish + monitoring type normalisation. */
+
+function monitoringTypeFromFeature(feature){
+  var p=(feature&&feature.properties)||{};
+  var vals=[];
+  Object.keys(p).forEach(function(k){
+    var v=p[k];
+    if(v!==null&&v!==undefined)vals.push(String(v));
+  });
+  var blob=vals.join(' ').toLowerCase();
+
+  if(/bird[\s_-]*count|birdcount/.test(blob))return 'Bird Count';
+  if(/camera|trail[\s_-]*cam|camera[\s_-]*trap|cameratrap/.test(blob))return 'Camera';
+  if(/tracking[\s_-]*tunnel|trackingtunnel/.test(blob))return 'Tracking tunnel';
+  if(/wax[\s_-]*block|waxblock/.test(blob))return 'Wax block';
+  if(/wax[\s_-]*tag|waxtag/.test(blob))return 'Wax tags';
+  return null;
+}
+
+/*
+  The main index converts Trap.NZ monitoring features into its own smaller
+  objects. Some Trap.NZ feeds put the actual monitoring type in a field other
+  than `type`, so the old filter could show the checkbox but never match the
+  map feature. Normalise the live WFS response before the main app reads it.
+*/
+var nativeFetch=window.fetch;
+if(nativeFetch&&!window.__kpMonitoringFetchFix){
+  window.__kpMonitoringFetchFix=true;
+  window.fetch=function(input,init){
+    return nativeFetch.call(this,input,init).then(function(response){
+      try{
+        var url=typeof input==='string'?input:(input&&input.url)||'';
+        if(url.indexOf('default-project-monitoring-stations')<0)return response;
+        return response.clone().json().then(function(json){
+          if(json&&Array.isArray(json.features)){
+            json.features.forEach(function(f){
+              var mt=monitoringTypeFromFeature(f);
+              if(mt){
+                f.properties=f.properties||{};
+                /* Put the normalised value first so index.html picks it. */
+                f.properties.monitoring_type=mt;
+                f.properties.monitoringType=mt;
+                f.properties.type=mt;
+              }
+            });
+          }
+          return new Response(JSON.stringify(json),{
+            status:response.status,
+            statusText:response.statusText,
+            headers:response.headers
+          });
+        }).catch(function(){return response;});
+      }catch(e){return response;}
+    });
+  };
+}
+
 function boot(){
   var drawer=document.getElementById('drawer');
   if(!drawer){setTimeout(boot,250);return;}
@@ -25,7 +79,7 @@ function boot(){
     document.head.appendChild(css);
   }
 
-  function toggleBody(button, body, owner){
+  function toggleBody(button,body,owner){
     if(!body)return;
     var open=body.style.display==='block';
     body.style.display=open?'none':'block';
@@ -33,20 +87,18 @@ function boot(){
     button.textContent=open?'Show types':'Hide types';
   }
 
-  // Re-bind the top-level Show types buttons with one delegated handler.
-  // This avoids taps being lost when the filter rows are rebuilt after sync.
   if(!drawer.dataset.kpTypesBound){
     drawer.dataset.kpTypesBound='1';
     drawer.addEventListener('click',function(e){
       var b=e.target.closest('.layerhead .types');
-      if(b && drawer.contains(b)){
+      if(b&&drawer.contains(b)){
         e.preventDefault();e.stopPropagation();
         var layer=b.closest('.layer');
         toggleBody(b,layer&&layer.querySelector(':scope > .layerbody'),layer);
         return;
       }
       var sb=e.target.closest('.group .head .types');
-      if(sb && drawer.contains(sb)){
+      if(sb&&drawer.contains(sb)){
         e.preventDefault();e.stopPropagation();
         var group=sb.closest('.group');
         toggleBody(sb,group&&group.querySelector(':scope > .body'),group);
@@ -54,16 +106,11 @@ function boot(){
     },true);
   }
 
-  // Make sure the requested Trap.NZ-style status choices are always labelled clearly.
   var statusHead=drawer.querySelector('.group[data-kind="status"] .head span');
   if(statusHead)statusHead.textContent='Trap status';
-
-  // The main index builds these from live Trap.NZ data. If the monitoring data
-  // contains wax-tag or camera information, monType() already normalises them
-  // to the two names below. We deliberately do not fabricate options when the
-  // data does not contain them.
   var monHead=drawer.querySelector('.group[data-kind="mon"] .head span');
   if(monHead)monHead.textContent='Monitoring types';
 }
+
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
