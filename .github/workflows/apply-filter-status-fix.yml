@@ -1,0 +1,80 @@
+name: Apply filter status fix
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-filter-status-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch index.html
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+
+          # Add trap status controls directly after the Traps master switch.
+          marker = '<div class="mfGroup" data-kind="trap">'
+          status = '''<div class="mfGroup" data-kind="status">\n  <div class="mfHead"><span>Trap status</span><button type="button">Show types</button></div>\n  <div class="mfBody" id="mfStatus"></div>\n</div>\n'''
+          if 'id="mfStatus"' not in s:
+              s = s.replace(marker, status + marker, 1)
+
+          # Make monitoring types explicitly include Wax tags and Camera, while retaining other Trap.NZ types.
+          old = '<div class="mfGroup" data-kind="mon">\n  <div class="mfHead"><span>Monitoring Sites</span><button type="button">Show types</button></div>\n  <div class="mfBody" id="mfMons"></div>\n</div>'
+          new = old
+          if old in s:
+              new = old
+
+          # Store raw status/disabled fields when Trap.NZ data is normalised.
+          oldtrap = "retired:field(p,['is_retired','retired'],'0'),notes:field(p,['notes'],'')"
+          newtrap = "retired:field(p,['is_retired','retired'],'0'),status:field(p,['status','trap_status','trapStatus'],''),disabled:field(p,['disabled','is_disabled','isDisabled'],'0'),enabled:field(p,['enabled','is_enabled','isEnabled'],''),notes:field(p,['notes'],'')"
+          if oldtrap in s:
+              s = s.replace(oldtrap, newtrap, 1)
+
+          # Replace filters/pass functions with status-aware versions.
+          oldf = "function filters(){var st=window.KPFilterState||{};return{line:st.line||[],trapType:st.trap||[],monType:st.mon||[],search:$(\'search\').value.trim().toLowerCase()}}\nfunction pass(t,f,mon){var k=mon?\'monType\':\'trapType\',vals=f[k]||[];if(vals.length&&vals.indexOf(t.type)<0)return false;if(f.line&&f.line.length&&f.line.indexOf(t.line)<0)return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(\' \').toLowerCase().indexOf(f.search)>=0}"
+          newf = "function trapStatus(t){var st=text(field(t,['status','trap_status','trapStatus'],'' )).trim().toLowerCase();var dis=text(field(t,['disabled','is_disabled','isDisabled'],'' )).trim().toLowerCase();var en=text(field(t,['enabled','is_enabled','isEnabled'],'' )).trim().toLowerCase();if(dis==='1'||dis==='true'||dis==='yes'||en==='0'||en==='false'||en==='no'||st==='disabled'||st==='inactive'||st==='deactivated')return 'disabled';if(String(t.retired).toLowerCase()==='1'||String(t.retired).toLowerCase()==='true'||st==='retired')return 'retired';return 'active'}\nfunction filters(){var st=window.KPFilterState||{};return{line:st.line||[],trapType:st.trap||[],monType:st.mon||[],status:st.status&&st.status.length?st.status:['active'],search:$(\'search\').value.trim().toLowerCase()}}\nfunction pass(t,f,mon){var k=mon?'monType':'trapType',vals=f[k]||[];if(vals.length&&vals.indexOf(t.type)<0)return false;if(!mon&&f.status&&f.status.length&&f.status.indexOf(trapStatus(t))<0)return false;if(f.line&&f.line.length&&f.line.indexOf(t.line)<0)return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(' ').toLowerCase().indexOf(f.search)>=0}"
+          if oldf in s:
+              s=s.replace(oldf,newf,1)
+
+          # Replace the old filter interaction patch with a robust four-group version.
+          pat=r'<script id="filter-interaction-patch">.*?</script>'
+          patch=r'''<script id="filter-interaction-patch">
+(function(){
+  var st=window.KPFilterState=window.KPFilterState||{trap:[],line:[],mon:[],status:['active'],ready:{trap:false,line:false,mon:false,status:false}};
+  function sel(k){return document.getElementById(k==='trap'?'trapType':k==='line'?'line':k==='mon'?'monType':'trapStatus')}
+  function body(k){return document.getElementById(k==='trap'?'mfTraps':k==='line'?'mfLines':k==='mon'?'mfMons':'mfStatus')}
+  function vals(k){var s=sel(k);return s?Array.prototype.slice.call(s.options).map(function(o){return o.value}).filter(Boolean):[]}
+  function sync(k){var a=vals(k),old=st[k]||[];if(!st.ready[k]){st[k]=k==='status'?(a.indexOf('active')>=0?['active']:a.slice()):a.slice();st.ready[k]=true;return}var keep=old.filter(function(v){return a.indexOf(v)>=0});st[k]=keep.length?keep:a.slice()}
+  function fire(k){var s=sel(k);if(!s)return;s.value=st[k].length===1?st[k][0]:'';s.dispatchEvent(new Event('change',{bubbles:true}));s.dispatchEvent(new Event('input',{bubbles:true}))}
+  function build(k){var b=body(k);if(!b)return;if(k==='status'){var opts=[['active','Active'],['retired','Retired'],['disabled','Disabled']];b.innerHTML='';if(!st.ready.status){st.status=['active'];st.ready.status=true}opts.forEach(function(o){var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o[1];var cb=document.createElement('input');cb.type='checkbox';cb.checked=st.status.indexOf(o[0])>=0;cb.addEventListener('change',function(){if(cb.checked){if(st.status.indexOf(o[0])<0)st.status.push(o[0])}else st.status=st.status.filter(function(v){return v!==o[0]});if(!st.status.length)st.status=['active'];window.dispatchEvent(new Event('kpfilters'));render();});row.appendChild(span);row.appendChild(cb);b.appendChild(row)});return}var s=sel(k);if(!s)return;sync(k);var opts=Array.prototype.slice.call(s.options).filter(function(o){return o.value});if(k==='mon'){var seen={};opts=[['Wax tags','Wax tags'],['Camera','Camera']].map(function(x){return {value:x[0],text:x[1]}}).concat(opts.map(function(o){return {value:o.value,text:o.text}})).filter(function(o){var q=o.value.toLowerCase();if(seen[q])return false;seen[q]=1;return true})}b.innerHTML='';opts.forEach(function(o){var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o.text;var cb=document.createElement('input');cb.type='checkbox';cb.checked=st[k].indexOf(o.value)>=0;cb.dataset.filterValue=o.value;cb.addEventListener('change',function(){if(cb.checked){if(st[k].indexOf(o.value)<0)st[k].push(o.value)}else st[k]=st[k].filter(function(v){return v!==o.value});fire(k);render()});row.appendChild(span);row.appendChild(cb);b.appendChild(row)})}
+  window.mfBuild=function(){build('trap');build('line');build('mon');build('status')};
+  document.addEventListener('click',function(e){var b=e.target.closest('.mfHead button');if(!b)return;var g=b.closest('.mfGroup');if(!g)return;e.preventDefault();g.classList.toggle('open');b.textContent=g.classList.contains('open')?'Hide types':'Show types'});
+  document.addEventListener('DOMContentLoaded',function(){window.mfBuild()});
+  setTimeout(function(){window.mfBuild()},300);
+})();
+</script>'''
+          s,n=re.subn(pat,patch,s,count=1,flags=re.S)
+          if n==0:
+              raise SystemExit('filter interaction patch not found')
+
+          # Add hidden status selector used by the filter state.
+          hidden='<div class="section" style="display:none"><select id="trapStatus"><option value="active">Active</option><option value="retired">Retired</option><option value="disabled">Disabled</option></select></div>'
+          if 'id="trapStatus"' not in s:
+              s=s.replace('<div class="section" style="display:none"><b>Filter by line</b>',hidden+'<div class="section" style="display:none"><b>Filter by line</b>',1)
+
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit patched app
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then echo 'No changes needed'; exit 0; fi
+          git commit -m 'Fix trap status and monitoring type filters'
+          git push
