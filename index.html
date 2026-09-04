@@ -127,4 +127,14 @@ $('filterBtn').onclick=function(){$('drawer').classList.add('open')};$('close').
 
 
 <!-- Kaitiaki Filter Status v1 -->
+
+<script id="modern-filter-js">
+(function(){
+function mfBuild(){var root=document.getElementById('modernFilters');if(!root)return;function fill(id,sel){var box=document.getElementById(id);if(!box)return;box.innerHTML='';var opts=[].slice.call(document.querySelectorAll(sel+' option'));opts.forEach(function(o){if(!o.value)return;var row=document.createElement('label');row.className='mfRow';var cb=document.createElement('input');cb.type='checkbox';cb.checked=document.querySelector(sel).value===o.value;cb.dataset.value=o.value;cb.onchange=function(){var select=document.querySelector(sel);select.value=this.checked?this.dataset.value:'';select.dispatchEvent(new Event('input',{bubbles:true}));[].slice.call(box.querySelectorAll('input')).forEach(function(x){if(x!==cb)x.checked=false})};row.appendChild(document.createTextNode(o.textContent));row.appendChild(cb);box.appendChild(row)});}
+fill('mfLines','#line');fill('mfTraps','#trapType');fill('mfMons','#monType');
+[].slice.call(root.querySelectorAll('.mfHead button')).forEach(function(b){b.onclick=function(){b.parentElement.parentElement.classList.toggle('open')}});
+}
+mfBuild();setTimeout(mfBuild,1000);setTimeout(mfBuild,2500);
+})();
+</script>
 </body></html>
