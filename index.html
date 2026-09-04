@@ -105,63 +105,20 @@ $('filterBtn').onclick=function(){$('drawer').classList.add('open')};$('close').
 <script id="filter-interaction-patch">
 (function(){
   var st=window.KPFilterState=window.KPFilterState||{trap:[],line:[],mon:[],ready:{trap:false,line:false,mon:false}};
-  function sel(kind){return document.getElementById(kind==='trap'?'trapType':kind==='line'?'line':'monType')}
-  function body(kind){return document.getElementById(kind==='trap'?'mfTraps':kind==='line'?'mfLines':'mfMons')}
-  function values(kind){var s=sel(kind);return s?Array.prototype.slice.call(s.options).map(function(o){return o.value}).filter(Boolean):[]}
-  function keepOrAll(kind){
-    var all=values(kind), old=st[kind];
-    if(!st.ready[kind]){st[kind]=all.slice();st.ready[kind]=true;return}
-    var kept=(old||[]).filter(function(v){return all.indexOf(v)>=0});
-    st[kind]=kept.length?kept:all.slice();
-  }
-  function fire(kind){
-    var s=sel(kind); if(!s)return;
-    s.value=st[kind].length===1?st[kind][0]:'';
-    s.dispatchEvent(new Event('change',{bubbles:true}));
-    s.dispatchEvent(new Event('input',{bubbles:true}));
-  }
-  function build(kind){
-    var b=body(kind); if(!b)return;
-    keepOrAll(kind);
-    b.innerHTML='';
-    values(kind).forEach(function(v){
-      var o=Array.prototype.slice.call(sel(kind).options).find(function(x){return x.value===v});
-      var row=document.createElement('label');row.className='mfRow';
-      var span=document.createElement('span');span.textContent=o?o.text:v;
-      var cb=document.createElement('input');cb.type='checkbox';cb.checked=st[kind].indexOf(v)>=0;cb.dataset.filterValue=v;
-      cb.addEventListener('change',function(){
-        if(cb.checked){if(st[kind].indexOf(v)<0)st[kind].push(v)}
-        else{st[kind]=st[kind].filter(function(x){return x!==v})}
-        fire(kind);
-        build(kind);
-      });
-      row.appendChild(span);row.appendChild(cb);b.appendChild(row);
-    });
-  }
+  function sel(k){return document.getElementById(k==='trap'?'trapType':k==='line'?'line':'monType')}
+  function body(k){return document.getElementById(k==='trap'?'mfTraps':k==='line'?'mfLines':'mfMons')}
+  function vals(k){var s=sel(k);return s?Array.prototype.slice.call(s.options).map(function(o){return o.value}).filter(Boolean):[]}
+  function sync(k){var a=vals(k),old=st[k]||[];if(!st.ready[k]){st[k]=a.slice();st.ready[k]=true;return}var keep=old.filter(function(v){return a.indexOf(v)>=0});st[k]=keep.length?keep:a.slice()}
+  function fire(k){var s=sel(k);if(!s)return;s.value=st[k].length===1?st[k][0]:'';s.dispatchEvent(new Event('change',{bubbles:true}));s.dispatchEvent(new Event('input',{bubbles:true}))}
+  function build(k){var b=body(k),s=sel(k);if(!b||!s)return;sync(k);b.innerHTML='';Array.prototype.slice.call(s.options).forEach(function(o){if(!o.value)return;var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o.text;var cb=document.createElement('input');cb.type='checkbox';cb.checked=st[k].indexOf(o.value)>=0;cb.dataset.filterValue=o.value;cb.addEventListener('change',function(){if(cb.checked){if(st[k].indexOf(o.value)<0)st[k].push(o.value)}else{st[k]=st[k].filter(function(v){return v!==o.value})}fire(k);build(k)});row.appendChild(span);row.appendChild(cb);b.appendChild(row)})}
   window.mfBuild=function(){build('trap');build('line');build('mon')};
-  document.addEventListener('click',function(e){
-    var b=e.target.closest('.mfHead button');
-    if(!b)return;
-    var g=b.closest('.mfGroup');if(!g)return;
-    e.preventDefault();g.classList.toggle('open');b.textContent=g.classList.contains('open')?'Hide types':'Show types';
-  });
-  document.addEventListener('change',function(e){
-    if(e.target.matches('#line,#trapType,#monType')){setTimeout(function(){window.mfBuild()},0)}
-  });
+  document.addEventListener('click',function(e){var b=e.target.closest('.mfHead button');if(!b)return;var g=b.closest('.mfGroup');if(!g)return;e.preventDefault();g.classList.toggle('open');b.textContent=g.classList.contains('open')?'Hide types':'Show types'});
   document.addEventListener('DOMContentLoaded',function(){window.mfBuild()});
-  setTimeout(function(){window.mfBuild()},250);
+  setTimeout(function(){window.mfBuild()},300);
 })();
 </script>
 
 
 
-<script id="modern-filter-js">
-(function(){
-function mfBuild(){var root=document.getElementById('modernFilters');if(!root)return;function fill(id,sel){var box=document.getElementById(id);if(!box)return;box.innerHTML='';var opts=[].slice.call(document.querySelectorAll(sel+' option'));opts.forEach(function(o){if(!o.value)return;var row=document.createElement('label');row.className='mfRow';var cb=document.createElement('input');cb.type='checkbox';cb.checked=document.querySelector(sel).value===o.value;cb.dataset.value=o.value;cb.onchange=function(){var select=document.querySelector(sel);select.value=this.checked?this.dataset.value:'';select.dispatchEvent(new Event('input',{bubbles:true}));[].slice.call(box.querySelectorAll('input')).forEach(function(x){if(x!==cb)x.checked=false})};row.appendChild(document.createTextNode(o.textContent));row.appendChild(cb);box.appendChild(row)});}
-fill('mfLines','#line');fill('mfTraps','#trapType');fill('mfMons','#monType');
-[].slice.call(root.querySelectorAll('.mfHead button')).forEach(function(b){b.onclick=function(){b.parentElement.parentElement.classList.toggle('open')}});
-}
-mfBuild();setTimeout(mfBuild,1000);setTimeout(mfBuild,2500);
-})();
-</script>
+
 </body></html>
