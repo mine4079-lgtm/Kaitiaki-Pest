@@ -1,0 +1,62 @@
+name: Apply TrapNZ style filters
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-trapnz-style-filters.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch index.html
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          old="""function filters(){return{line:$(\'line\').value,trapType:$(\'trapType\').value,monType:$(\'monType\').value,search:$(\'search\').value.trim().toLowerCase()}}\nfunction pass(t,f,mon){if(f.line&&t.line!==f.line)return false;var k=mon?\'monType\':\'trapType\';if(f[k]&&t.type!==f[k])return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(\' \').toLowerCase().indexOf(f.search)>=0}"""
+          new="""function selectedFilterValues(kind){var id=kind===\'line\'?\'mfLines\':kind===\'trap\'?\'mfTraps\':\'mfMons\',box=$(id);if(box){var checks=Array.prototype.slice.call(box.querySelectorAll(\'input[data-filter-value]\'));if(checks.length)return checks.filter(function(c){return c.checked}).map(function(c){return c.getAttribute(\'data-filter-value\')}).filter(Boolean)}return []}\nfunction filters(){var lineVals=selectedFilterValues(\'line\'),trapVals=selectedFilterValues(\'trap\'),monVals=selectedFilterValues(\'mon\');return{lines:lineVals,trapTypes:trapVals,monTypes:monVals,line:$(\'line\').value,trapType:$(\'trapType\').value,monType:$(\'monType\').value,search:$(\'search\').value.trim().toLowerCase()}}\nfunction pass(t,f,mon){var kind=mon?\'mon\':\'trap\',box=$(kind===\'mon\'?\'mfMons\':\'mfTraps\'),checks=box?Array.prototype.slice.call(box.querySelectorAll(\'input[data-filter-value]\')):[],vals=mon?f.monTypes:f.trapTypes;if(checks.length&&!vals.length)return false;if(vals&&vals.length&&vals.indexOf(t.type)<0)return false;if(!mon){var lbox=$(\'mfLines\'),lchecks=lbox?Array.prototype.slice.call(lbox.querySelectorAll(\'input[data-filter-value]\')):[],lines=f.lines;if(lchecks.length&&!lines.length)return false;if(lines&&lines.length&&lines.indexOf(t.line)<0)return false}if(!checks.length){if(mon&&f.monType&&t.type!==f.monType)return false;if(!mon&&f.trapType&&t.type!==f.trapType)return false}if(!mon&&(!f.lines||!f.lines.length)&&f.line&&t.line!==f.line)return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(\' \').toLowerCase().indexOf(f.search)>=0}"""
+          if old not in s: raise SystemExit('filters block not found')
+          s=s.replace(old,new,1)
+          a=s.index('<script id="filter-interaction-patch">'); b=s.index('</script>',a)+9
+          s=s[:a]+'''<script id="filter-interaction-patch">(function(){
+  function hiddenSelect(kind){return kind==='line'?document.getElementById('line'):kind==='trap'?document.getElementById('trapType'):document.getElementById('monType')}
+  function refreshGroup(kind){var group=document.querySelector('.mfGroup[data-kind="'+kind+'"]'),body=group&&group.querySelector('.mfBody'),sel=hiddenSelect(kind);if(!body||!sel)return;if(!body.children.length){Array.prototype.slice.call(sel.options).forEach(function(o){if(!o.value)return;var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o.text;var cb=document.createElement('input');cb.type='checkbox';cb.setAttribute('data-filter-value',o.value);cb.checked=true;row.appendChild(span);row.appendChild(cb);body.appendChild(row)})}Array.prototype.slice.call(body.querySelectorAll('input[data-filter-value]')).forEach(function(cb){if(cb.dataset.initialized)return;cb.dataset.initialized='1';cb.addEventListener('change',function(){var vals=Array.prototype.slice.call(body.querySelectorAll('input[data-filter-value]')).filter(function(x){return x.checked}).map(function(x){return x.getAttribute('data-filter-value')});sel.value='';sel.setAttribute('data-modern-values',JSON.stringify(vals));sel.dispatchEvent(new Event('input',{bubbles:true}))})})}
+  function refreshAll(){refreshGroup('trap');refreshGroup('line');refreshGroup('mon')}
+  document.addEventListener('click',function(e){var head=e.target.closest('.mfHead button');if(head){var g=head.closest('.mfGroup');if(g){g.classList.toggle('open');head.textContent=g.classList.contains('open')?(g.getAttribute('data-kind')==='line'?'Hide lines':'Hide types'):(g.getAttribute('data-kind')==='line'?'Show lines':'Show types')}e.preventDefault();return}},true);
+  document.addEventListener('DOMContentLoaded',refreshAll);setTimeout(refreshAll,500);setTimeout(refreshAll,1500);setTimeout(refreshAll,3000)
+})();</script>'''+s[b:]
+          a=s.index('<script id="modern-filter-js">'); b=s.index('</script>',a)+9
+          s=s[:a]+'''<script id="modern-filter-js">(function(){
+  function selFor(kind){return document.getElementById(kind==='line'?'line':kind==='trap'?'trapType':'monType')}
+  function fire(sel){if(sel)sel.dispatchEvent(new Event('input',{bubbles:true}))}
+  function build(kind,id){var box=document.getElementById(id),sel=selFor(kind);if(!box||!sel)return;Array.prototype.slice.call(box.querySelectorAll('input[data-filter-value]')).forEach(function(cb){if(cb.dataset.wired)return;cb.dataset.wired='1';cb.checked=true;cb.addEventListener('change',function(){sel.value='';sel.setAttribute('data-modern-values',JSON.stringify(Array.prototype.slice.call(box.querySelectorAll('input[data-filter-value]')).filter(function(x){return x.checked}).map(function(x){return x.getAttribute('data-filter-value')})));fire(sel)})})}
+  window.mfBuild=function(){build('trap','mfTraps');build('line','mfLines');build('mon','mfMons')};
+  function syncVisibility(){var t=document.getElementById('showTraps'),tt=document.getElementById('mfTrapsToggle');if(tt&&t&&!tt.dataset.wired){tt.dataset.wired='1';tt.checked=t.checked;tt.addEventListener('change',function(){t.checked=tt.checked;t.dispatchEvent(new Event('input',{bubbles:true}))})}}
+  window.mfBuild();syncVisibility();setTimeout(window.mfBuild,300);setTimeout(window.mfBuild,1200);setTimeout(window.mfBuild,2500)
+})();</script>'''+s[b:]
+          import re
+          s=re.sub(r'<div class="section"><b>Layers</b>.*?</div>\n<div class="modernFilters"', '<div class="section" style="display:none"><b>Layers</b>\n<div class="modernFilters"', s, count=1, flags=re.S)
+          s=s.replace('<div class="mfHead"><span>Trap lines</span><button type="button">Show types</button></div>','<div class="mfHead"><span>Trap lines</span><button type="button">Show lines</button></div>')
+          p.write_text(s)
+          PY
+      - name: Validate
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from bs4 import BeautifulSoup
+          s=BeautifulSoup(Path('index.html').read_text(),'html.parser')
+          for i,sc in enumerate(s.find_all('script')):
+              if sc.string: Path(f'/tmp/s{i}.js').write_text(sc.string)
+          PY
+          for f in /tmp/s*.js; do node --check "$f"; done
+      - name: Commit patch and remove workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git rm .github/workflows/apply-trapnz-style-filters.yml
+          git commit -m 'Fix Trap.NZ style filters'
+          git push
