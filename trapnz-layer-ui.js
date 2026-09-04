@@ -1,26 +1,69 @@
 (function(){
+'use strict';
+/* Kaitiaki Pest — Trap.NZ-style filter polish/fix.
+   The main map owns the actual filter state/rendering. This file only improves
+   the filter UI and keeps the nested Show types controls reliable. */
 function boot(){
-var panel=document.querySelector('.modernFilters');if(!panel)return setTimeout(boot,300);
-var old=document.getElementById('showTraps');if(old&&old.closest('.section'))old.closest('.section').style.display='none';
-var st=window.KPFilterState=window.KPFilterState||{};st.trap=Array.isArray(st.trap)?st.trap:[];st.line=Array.isArray(st.line)?st.line:[];st.mon=Array.isArray(st.mon)?st.mon:[];st.status=Array.isArray(st.status)&&st.status.length?st.status:['active'];
-var open={traps:false,monitoring:false,lines:false,status:false,trap:false,mon:false,line:false};
-panel.innerHTML='<div class="sectionTitle">Filters</div><div class="mfLayer" data-layer="traps"><div class="mfLayerHead"><span>Traps</span><div class="mfHeadRight"><button type="button" class="mfTypesBtn">Show types</button><input class="mfSwitch" id="mfTrapsToggle" type="checkbox"></div></div><div class="mfLayerBody"><div class="mfSubGroup" data-kind="status"><div class="mfSubHead"><span>Trap status</span><button type="button" class="mfSubBtn">Show types</button></div><div class="mfBody" id="mfStatus"></div></div><div class="mfSubGroup" data-kind="trap"><div class="mfSubHead"><span>Trap types</span><button type="button" class="mfSubBtn">Show types</button></div><div class="mfBody" id="mfTraps"></div></div></div></div><div class="mfLayer" data-layer="monitoring"><div class="mfLayerHead"><span>Monitoring</span><div class="mfHeadRight"><button type="button" class="mfTypesBtn">Show types</button><input class="mfSwitch" id="mfMonToggle" type="checkbox"></div></div><div class="mfLayerBody"><div class="mfSubGroup" data-kind="mon"><div class="mfSubHead"><span>Monitoring types</span><button type="button" class="mfSubBtn">Show types</button></div><div class="mfBody" id="mfMons"></div></div></div></div><div class="mfLayer" data-layer="lines"><div class="mfLayerHead"><span>Trap lines</span><div class="mfHeadRight"><button type="button" class="mfTypesBtn">Show types</button><input class="mfSwitch" id="mfLinesToggle" type="checkbox"></div></div><div class="mfLayerBody"><div class="mfSubGroup" data-kind="line"><div class="mfSubHead"><span>Trap lines</span><button type="button" class="mfSubBtn">Show types</button></div><div class="mfBody" id="mfLines"></div></div></div></div>';
-var css=document.createElement('style');css.id='trapnz-layer-ui-css';css.textContent='.mfLayer{border-top:1px solid #ccc;padding:4px 0}.mfLayerHead{min-height:56px;display:flex;align-items:center;justify-content:space-between;font-size:17px;font-weight:700}.mfHeadRight{display:flex;align-items:center;gap:18px}.mfTypesBtn,.mfSubBtn{border:0;background:none;color:#222;font-size:15px;padding:10px 0}.mfLayerBody{display:none;background:#eee;margin:0 0 8px}.mfLayer.open .mfLayerBody{display:block}.mfSubGroup{border-top:1px solid #ddd}.mfSubHead{min-height:50px;padding:0 12px 0 16px;display:flex;align-items:center;justify-content:space-between;font-size:16px;font-weight:650}.mfSubGroup.open>.mfBody{display:block}.mfBody{display:none;background:#eee;overflow:hidden}.mfRow{display:flex;align-items:center;justify-content:space-between;padding:14px 12px 14px 16px;border-bottom:1px solid #ddd;font-size:16px;min-height:52px}.mfRow input{width:24px;height:24px;accent-color:#111;margin:0}.mfGroupRow{background:#f7f7f7;font-weight:650}.mfChildRow{padding-left:30px;background:#fff;font-size:15px}.mfSwitch{appearance:none;width:54px;height:30px;border-radius:18px;background:#ddd;position:relative;margin:0;border:1px solid #111}.mfSwitch:after{content:"";position:absolute;width:24px;height:24px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 1px 3px #0004}.mfSwitch:checked{background:#000}.mfSwitch:checked:after{left:27px}.modernFilters .sectionTitle{font-size:24px;font-weight:500;margin:6px 0 14px}';document.head.appendChild(css);
-function opts(id){var s=document.getElementById(id);return s?Array.prototype.slice.call(s.options).filter(function(o){return o.value}).map(function(o){return{value:o.value,text:o.text}}):[]}
-function norm(v){return String(v||'').trim().toLowerCase().replace(/[\s_-]+/g,' ')}
-function bucket(v){var x=norm(v);if(/wax/.test(x))return'Wax tags';if(/camera|trail\s*cam|camera\s*trap/.test(x))return'Camera';return'Other'}
-function vals(g){return opts('monType').filter(function(o){return bucket(o.value)===g}).map(function(o){return o.value})}
-function set(k,v,on){if(on){if(st[k].indexOf(v)<0)st[k].push(v)}else st[k]=st[k].filter(function(x){return x!==v})}
-function redraw(){var q=document.getElementById('search');if(q)q.dispatchEvent(new Event('input',{bubbles:true}))}
-function row(box,label,checked,fn,cls){var r=document.createElement('label');r.className='mfRow'+(cls?' '+cls:'');var sp=document.createElement('span');sp.textContent=label;var c=document.createElement('input');c.type='checkbox';c.checked=!!checked;c.addEventListener('change',function(){fn(c.checked)});r.appendChild(sp);r.appendChild(c);box.appendChild(r);return c}
-function buildStatus(){var b=document.getElementById('mfStatus');if(!b)return;b.innerHTML='';var all=['active','retired','disabled'];row(b,'Show all',all.every(function(v){return st.status.indexOf(v)>=0}),function(on){st.status=on?all.slice():['active'];redraw()},'mfGroupRow');[['active','Active'],['retired','Retired'],['disabled','Disabled']].forEach(function(x){row(b,x[1],st.status.indexOf(x[0])>=0,function(on){set('status',x[0],on);redraw()},'mfChildRow')})}
-function buildKind(id,k,selectId){var b=document.getElementById(id);if(!b)return;b.innerHTML='';var os=opts(selectId);st[k]=st[k].filter(function(v){return os.some(function(o){return o.value===v})});row(b,'Show all',st[k].length===0,function(on){if(on){st[k]=[];redraw()}},'mfGroupRow');os.forEach(function(o){row(b,o.text,st[k].indexOf(o.value)>=0,function(on){set(k,o.value,on);redraw()},'mfChildRow')})}
-function buildMon(){var b=document.getElementById('mfMons');if(!b)return;b.innerHTML='';var os=opts('monType');st.mon=st.mon.filter(function(v){return os.some(function(o){return o.value===v})});row(b,'Show all',st.mon.length===0,function(on){if(on){st.mon=[];redraw()}},'mfGroupRow');['Wax tags','Camera','Other'].forEach(function(g){var group=vals(g);if(!group.length)return;var groupChecked=group.every(function(v){return st.mon.indexOf(v)>=0});row(b,g,groupChecked,function(on){group.forEach(function(v){set('mon',v,on)});redraw()},'mfGroupRow');group.forEach(function(o){var found=os.find(function(x){return x.value===o});if(!found)return;row(b,found.text,st.mon.indexOf(found.value)>=0,function(on){set('mon',found.value,on);redraw()},'mfChildRow')})}
-function sync(){[['showTraps','mfTrapsToggle'],['showMon','mfMonToggle'],['showLines','mfLinesToggle']].forEach(function(p){var a=document.getElementById(p[0]),b=document.getElementById(p[1]);if(!a||!b)return;b.checked=a.checked;b.onchange=function(){a.checked=b.checked;a.dispatchEvent(new Event('input',{bubbles:true}))}})}
-function build(){buildStatus();buildKind('mfTraps','trap','trapType');buildKind('mfLines','line','line');buildMon();sync()}
-try{Object.defineProperty(window,'mfBuild',{value:build,writable:false,configurable:false,enumerable:true});}catch(e){window.mfBuild=build}
-build();
-document.addEventListener('click',function(e){var b=e.target.closest('.mfTypesBtn');if(b){var g=b.closest('.mfLayer'),k=g&&g.getAttribute('data-layer');if(k){open[k]=!open[k];g.classList.toggle('open',open[k]);b.textContent=open[k]?'Hide types':'Show types';e.preventDefault();e.stopImmediatePropagation();return}}var sb=e.target.closest('.mfSubBtn');if(sb){var sg=sb.closest('.mfSubGroup'),k=sg&&sg.getAttribute('data-kind');if(k){open[k]=!open[k];sg.classList.toggle('open',open[k]);sb.textContent=open[k]?'Hide types':'Show types';e.preventDefault();e.stopImmediatePropagation()}}},true);
+  var drawer=document.getElementById('drawer');
+  if(!drawer){setTimeout(boot,250);return;}
+
+  if(!document.getElementById('kp-filter-polish-css')){
+    var css=document.createElement('style');
+    css.id='kp-filter-polish-css';
+    css.textContent=''
+      +'.drawer .layer{border-top:1px solid #ccc;padding:0 0 2px}'
+      +'.drawer .layerhead{min-height:58px}'
+      +'.drawer .layerhead .types,.drawer .group .types{font-weight:500;white-space:nowrap}'
+      +'.drawer .layerbody{background:#eee}'
+      +'.drawer .group .head{background:#eee}'
+      +'.drawer .group .body{background:#eee}'
+      +'.drawer .row.all{background:#eee;font-weight:650}'
+      +'.drawer .row.child{background:#fff}'
+      +'.drawer .row input{accent-color:#111}'
+      +'.drawer .group.open>.body,.drawer .layer.open>.layerbody{display:block}'
+      +'.drawer .types:focus,.drawer .switch:focus,.drawer .row input:focus{outline:2px solid #0d594b;outline-offset:2px}';
+    document.head.appendChild(css);
+  }
+
+  function toggleBody(button, body, owner){
+    if(!body)return;
+    var open=body.style.display==='block';
+    body.style.display=open?'none':'block';
+    if(owner)owner.classList.toggle('open',!open);
+    button.textContent=open?'Show types':'Hide types';
+  }
+
+  // Re-bind the top-level Show types buttons with one delegated handler.
+  // This avoids taps being lost when the filter rows are rebuilt after sync.
+  if(!drawer.dataset.kpTypesBound){
+    drawer.dataset.kpTypesBound='1';
+    drawer.addEventListener('click',function(e){
+      var b=e.target.closest('.layerhead .types');
+      if(b && drawer.contains(b)){
+        e.preventDefault();e.stopPropagation();
+        var layer=b.closest('.layer');
+        toggleBody(b,layer&&layer.querySelector(':scope > .layerbody'),layer);
+        return;
+      }
+      var sb=e.target.closest('.group .head .types');
+      if(sb && drawer.contains(sb)){
+        e.preventDefault();e.stopPropagation();
+        var group=sb.closest('.group');
+        toggleBody(sb,group&&group.querySelector(':scope > .body'),group);
+      }
+    },true);
+  }
+
+  // Make sure the requested Trap.NZ-style status choices are always labelled clearly.
+  var statusHead=drawer.querySelector('.group[data-kind="status"] .head span');
+  if(statusHead)statusHead.textContent='Trap status';
+
+  // The main index builds these from live Trap.NZ data. If the monitoring data
+  // contains wax-tag or camera information, monType() already normalises them
+  // to the two names below. We deliberately do not fabricate options when the
+  // data does not contain them.
+  var monHead=drawer.querySelector('.group[data-kind="mon"] .head span');
+  if(monHead)monHead.textContent='Monitoring types';
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
