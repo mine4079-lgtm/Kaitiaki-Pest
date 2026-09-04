@@ -1,0 +1,94 @@
+name: TrapNZ style map layers
+on:
+  push:
+    paths:
+      - '.github/workflows/trapnz-layer-ui.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch map filter panel
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('index.html')
+          s=p.read_text()
+          start=s.index('<div class="section"><b>Layers</b>')
+          modern=s.index('<div class="modernFilters" id="modernFilters">', start)
+          s=s[:start]+s[modern:]
+          modern=s.index('<div class="modernFilters" id="modernFilters">')
+          end=s.index('<div class="section" style="display:none"><select id="trapStatus">', modern)
+          panel='''<div class="modernFilters" id="modernFilters">
+          <div class="sectionTitle">Filters</div>
+          <div class="mfLayer" data-layer="traps">
+            <div class="mfLayerHead"><span>Traps</span><div class="mfHeadRight"><button type="button" class="mfTypesBtn">Show types</button><input class="mfSwitch" id="mfTrapsToggle" type="checkbox" checked></div></div>
+            <div class="mfLayerBody">
+              <div class="mfSubGroup" data-kind="status"><div class="mfSubHead"><span>Trap status</span><button type="button" class="mfSubBtn">Show types</button></div><div class="mfBody" id="mfStatus"></div></div>
+              <div class="mfSubGroup" data-kind="trap"><div class="mfSubHead"><span>Trap types</span><button type="button" class="mfSubBtn">Show types</button></div><div class="mfBody" id="mfTraps"></div></div>
+            </div>
+          </div>
+          <div class="mfLayer" data-layer="monitoring">
+            <div class="mfLayerHead"><span>Monitoring</span><div class="mfHeadRight"><button type="button" class="mfTypesBtn">Show types</button><input class="mfSwitch" id="mfMonToggle" type="checkbox" checked></div></div>
+            <div class="mfLayerBody"><div class="mfSubGroup" data-kind="mon"><div class="mfSubHead"><span>Monitoring types</span><button type="button" class="mfSubBtn">Show types</button></div><div class="mfBody" id="mfMons"></div></div></div>
+          </div>
+          <div class="mfLayer" data-layer="lines">
+            <div class="mfLayerHead"><span>Trap lines</span><div class="mfHeadRight"><button type="button" class="mfTypesBtn">Show types</button><input class="mfSwitch" id="mfLinesToggle" type="checkbox" checked></div></div>
+            <div class="mfLayerBody"><div class="mfSubGroup" data-kind="line"><div class="mfSubHead"><span>Trap lines</span><button type="button" class="mfSubBtn">Show types</button></div><div class="mfBody" id="mfLines"></div></div></div>
+          </div>
+          <div class="mfLayer simpleLayer"><div class="mfLayerHead"><span>Baitstations</span><input class="mfSwitch" id="mfBait" type="checkbox"></div></div>
+          <div class="mfLayer simpleLayer"><div class="mfLayerHead"><span>Points of interest</span><input class="mfSwitch" id="mfPoi" type="checkbox"></div></div>
+          <div class="mfLayer simpleLayer"><div class="mfLayerHead"><span>Only sensor enabled</span><input class="mfSwitch" id="mfSensor" type="checkbox"></div></div>
+          <div class="section"><input id="search" type="text" placeholder="Search trap, site or line..."></div>
+          <div class="section"><b>Base map</b><label><input type="radio" name="base" value="street" checked> Street</label><label><input type="radio" name="base" value="satellite"> Satellite</label><label><input type="radio" name="base" value="topo"> Topographic</label><input id="linzKey" type="text" placeholder="LINZ API key"><button class="danger" id="saveKey">Save LINZ key</button><div class="hint" id="mapStatus">Street map works without a LINZ key.</div></div>
+          <div class="section"><button class="sync" id="sync2">↻ Sync Trap.NZ</button></div>
+          </div>
+          '''
+          s=s[:modern]+panel+s[end:]
+          for ident in ['filter-interaction-patch','modern-filter-js','kaitiaki-final-filter-controller']:
+              s=re.sub(r'<script id="'+re.escape(ident)+r'">.*?</script>','',s,flags=re.S)
+          s=re.sub(r'<!-- Kaitiaki Filter Status v1 -->.*?(?=<script|</body>)','',s,flags=re.S)
+          s=re.sub(r'<!-- KAITIAKI FINAL FILTER CONTROLLER -->','',s)
+          controller='''<script id="kaitiaki-trapnz-layer-controller">
+          (function(){
+            var st=window.KPFilterState=window.KPFilterState||{};
+            st.trap=Array.isArray(st.trap)?st.trap:[];st.line=Array.isArray(st.line)?st.line:[];st.mon=Array.isArray(st.mon)?st.mon:[];
+            st.status=Array.isArray(st.status)&&st.status.length?st.status:['active'];
+            var open={traps:false,monitoring:false,lines:false,status:false,trap:false,mon:false,line:false};
+            function el(id){return document.getElementById(id)}
+            function sel(k){return el(k==='status'?'trapStatus':k==='trap'?'trapType':k==='line'?'line':'monType')}
+            function opts(k){var s=sel(k);return s?Array.prototype.slice.call(s.options).filter(function(o){return o.value}).map(function(o){return {value:o.value,text:o.text}}):[]}
+            function norm(v){return String(v==null?'':v).trim().toLowerCase().replace(/[\\s_-]+/g,' ')}
+            function mb(v){var x=norm(v);if(/wax\\s*tags?|wax\\s*tag|waxtags?/.test(x))return 'Wax tags';if(/camera|trail\\s*cam|camera\\s*trap/.test(x))return 'Camera';return 'Other'}
+            function mvals(g){return opts('mon').filter(function(o){return mb(o.value)===g}).map(function(o){return o.value})}
+            function set(k,v,on){if(on){if(st[k].indexOf(v)<0)st[k].push(v)}else st[k]=st[k].filter(function(x){return x!==v})}
+            function redraw(){var q=el('search');if(q)q.dispatchEvent(new Event('input',{bubbles:true}))}
+            function row(box,label,checked,onchange){var r=document.createElement('label');r.className='mfRow';var sp=document.createElement('span');sp.textContent=label;var c=document.createElement('input');c.type='checkbox';c.checked=!!checked;c.addEventListener('change',function(){onchange(c.checked)});r.appendChild(sp);r.appendChild(c);box.appendChild(r)}
+            function buildStatus(){var b=el('mfStatus');if(!b)return;b.innerHTML='';var all=['active','retired','disabled'];row(b,'Show all',all.every(function(x){return st.status.indexOf(x)>=0}),function(on){st.status=on?all.slice():['active'];buildAll();redraw()});[['active','Active'],['retired','Retired'],['disabled','Disabled']].forEach(function(x){row(b,x[1],st.status.indexOf(x[0])>=0,function(on){set('status',x[0],on);if(!st.status.length)st.status=['active'];buildAll();redraw()})})}
+            function buildKind(k,id){var b=el(id);if(!b)return;b.innerHTML='';var os=opts(k);st[k]=st[k].filter(function(v){return os.some(function(o){return o.value===v})});row(b,'Show all',st[k].length===0,function(on){if(on){st[k]=[];buildAll();redraw()}});os.forEach(function(o){row(b,o.text,st[k].indexOf(o.value)>=0,function(on){set(k,o.value,on);buildAll();redraw()})})}
+            function buildMon(){var b=el('mfMons');if(!b)return;b.innerHTML='';var os=opts('mon');st.mon=st.mon.filter(function(v){return os.some(function(o){return o.value===v})});row(b,'Show all',st.mon.length===0,function(on){if(on){st.mon=[];buildAll();redraw()}});['Wax tags','Camera','Other'].forEach(function(g){var vs=mvals(g);if(!vs.length)return;row(b,g,vs.every(function(v){return st.mon.indexOf(v)>=0}),function(on){vs.forEach(function(v){set('mon',v,on)});buildAll();redraw()})})}
+            function syncLayers(){var pairs=[['showTraps','mfTrapsToggle'],['showMon','mfMonToggle'],['showLines','mfLinesToggle']];pairs.forEach(function(p){var a=el(p[0]),b=el(p[1]);if(!a||!b)return;b.checked=a.checked;b.onchange=function(){a.checked=b.checked;a.dispatchEvent(new Event('input',{bubbles:true}))}})}
+            function buildAll(){buildStatus();buildKind('trap','mfTraps');buildKind('line','mfLines');buildMon();syncLayers()}
+            window.mfBuild=buildAll;
+            document.addEventListener('click',function(e){var b=e.target.closest('.mfTypesBtn');if(b){var g=b.closest('.mfLayer'),k=g&&g.getAttribute('data-layer');if(!k)return;open[k]=!open[k];g.classList.toggle('open',open[k]);b.textContent=open[k]?'Hide types':'Show types';e.preventDefault();e.stopImmediatePropagation();return}var sb=e.target.closest('.mfSubBtn');if(sb){var sg=sb.closest('.mfSubGroup'),k=sg&&sg.getAttribute('data-kind');if(!k)return;open[k]=!open[k];sg.classList.toggle('open',open[k]);sb.textContent=open[k]?'Hide types':'Show types';e.preventDefault();e.stopImmediatePropagation()}},true);
+            document.addEventListener('change',function(e){if(e.target.matches('#line,#trapType,#monType,#trapStatus'))setTimeout(buildAll,0)});
+            function wait(){if(opts('trap').length||opts('line').length||opts('mon').length){buildAll();return}setTimeout(wait,250)}
+            if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wait);else wait();
+          })();
+          </script>'''
+          s=re.sub(r'\\s*</body>', '\\n'+controller+'\\n</body>', s, count=1, flags=re.S)
+          css='''<style id="trapnz-layer-filter-css">.modernFilters{margin-top:8px}.mfLayer{border-top:1px solid #ccc;padding:4px 0}.mfLayerHead{min-height:56px;display:flex;align-items:center;justify-content:space-between;font-size:17px;font-weight:700}.mfHeadRight{display:flex;align-items:center;gap:18px}.mfTypesBtn,.mfSubBtn{border:0;background:none;color:#222;font-size:15px;padding:10px 0}.mfLayerBody{display:none;background:#eee;margin:0 0 8px}.mfLayer.open .mfLayerBody{display:block}.mfSubGroup{border-top:1px solid #ddd}.mfSubHead{min-height:50px;padding:0 12px 0 16px;display:flex;align-items:center;justify-content:space-between;font-size:16px;font-weight:650}.mfSubGroup.open>.mfBody{display:block}.mfBody{display:none;margin:0;background:#eee;overflow:hidden}.mfRow{display:flex;align-items:center;justify-content:space-between;padding:14px 12px 14px 16px;border-bottom:1px solid #ddd;font-size:16px;min-height:52px}.mfRow:last-child{border-bottom:0}.mfRow input{width:24px;height:24px;accent-color:#111;margin:0}.mfSwitch{appearance:none;width:54px;height:30px;border-radius:18px;background:#ddd;position:relative;margin:0;border:1px solid #111;flex:0 0 auto}.mfSwitch:after{content:"";position:absolute;width:24px;height:24px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 1px 3px #0004}.mfSwitch:checked{background:#000}.mfSwitch:checked:after{left:27px}.simpleLayer{padding:0}.simpleLayer .mfLayerHead{padding:0}.modernFilters .sectionTitle{font-size:24px;font-weight:500;margin:6px 0 14px}</style>'''
+          s=s.replace('</head>',css+'\\n</head>',1)
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Make map filters match Trap.NZ layer layout'
+          git push
