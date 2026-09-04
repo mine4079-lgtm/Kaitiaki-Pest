@@ -119,6 +119,7 @@ $('filterBtn').onclick=function(){$('drawer').classList.add('open')};$('close').
   document.addEventListener('DOMContentLoaded',function(){refreshAll();setTimeout(refreshAll,500);setTimeout(refreshAll,1500);setTimeout(refreshAll,3000);setTimeout(refreshAll,6000)});
   setInterval(refreshAll,5000)
 })();</script>
+
 <script id="modern-filter-js">
 (function(){
   function selFor(kind){return document.getElementById(kind==='line'?'line':kind==='trap'?'trapType':'monType')}
