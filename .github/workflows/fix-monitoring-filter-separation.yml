@@ -1,0 +1,164 @@
+name: Fix monitoring filter separation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch monitoring filter
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+
+          start = s.find('<script id="filter-interaction-patch">')
+          if start < 0:
+              raise SystemExit('filter-interaction-patch script not found')
+          end = s.find('</script>', start)
+          if end < 0:
+              raise SystemExit('filter-interaction-patch closing tag not found')
+          end += len('</script>')
+
+          new_script = r'''<script id="filter-interaction-patch">
+          (function(){
+            var st=window.KPFilterState=window.KPFilterState||{trap:[],line:[],mon:[],status:['active'],ready:{trap:false,line:false,mon:false,status:false}};
+            function sel(k){return document.getElementById(k==='trap'?'trapType':k==='line'?'line':k==='mon'?'monType':'trapStatus')}
+            function body(k){return document.getElementById(k==='trap'?'mfTraps':k==='line'?'mfLines':k==='mon'?'mfMons':'mfStatus')}
+            function norm(v){return String(v==null?'':v).trim().toLowerCase().replace(/[_-]+/g,' ').replace(/\\s+/g,' ')}
+            function monFilterValue(m){
+              var t=norm(m&&m.type);
+              if(/\\bwax\\b.*\\btag\\b|\\btag\\b.*\\bwax\\b/.test(t)||t.indexOf('wax tag')>=0||t.indexOf('waxtag')>=0)return '__wax_tags__';
+              if(t.indexOf('camera')>=0)return '__camera__';
+              return String(m&&m.type||'');
+            }
+            function monLabel(m){
+              var v=monFilterValue(m);
+              if(v==='__wax_tags__')return 'Wax tags';
+              if(v==='__camera__')return 'Camera';
+              return String(m&&m.type||'Monitoring');
+            }
+            function vals(k){
+              var s=sel(k);
+              return s?Array.prototype.slice.call(s.options).map(function(o){return o.value}).filter(Boolean):[];
+            }
+            function sync(k){
+              var a=vals(k),old=st[k]||[];
+              if(!st.ready[k]){
+                st[k]=k==='status'?(a.indexOf('active')>=0?['active']:a.slice()):a.slice();
+                st.ready[k]=true;
+                return;
+              }
+              var keep=old.filter(function(v){return a.indexOf(v)>=0});
+              st[k]=keep.length?keep:a.slice();
+            }
+            function fire(k){
+              var s=sel(k); if(!s)return;
+              s.value=st[k].length===1?st[k][0]:'';
+              s.dispatchEvent(new Event('change',{bubbles:true}));
+              s.dispatchEvent(new Event('input',{bubbles:true}));
+            }
+            function addRow(b,value,label,checked,onchange){
+              var row=document.createElement('label');row.className='mfRow';
+              var span=document.createElement('span');span.textContent=label;
+              var cb=document.createElement('input');cb.type='checkbox';cb.checked=checked;cb.dataset.filterValue=value;
+              cb.addEventListener('change',onchange);
+              row.appendChild(span);row.appendChild(cb);b.appendChild(row);
+            }
+            function build(k){
+              var b=body(k); if(!b)return;
+              if(k==='status'){
+                var opts=[['active','Active'],['retired','Retired'],['disabled','Disabled']];
+                b.innerHTML='';
+                if(!st.ready.status){st.status=['active'];st.ready.status=true}
+                opts.forEach(function(o){addRow(b,o[0],o[1],st.status.indexOf(o[0])>=0,function(){
+                  var cb=this;
+                  if(cb.checked){if(st.status.indexOf(o[0])<0)st.status.push(o[0])}
+                  else st.status=st.status.filter(function(v){return v!==o[0]});
+                  if(!st.status.length)st.status=['active'];
+                  render();
+                })});
+                return;
+              }
+              if(k==='mon'){
+                var opts=[],seen={};
+                if(window.DATA && Array.isArray(DATA.monitoring)){
+                  DATA.monitoring.forEach(function(m){
+                    var value=monFilterValue(m),label=monLabel(m),key=value.toLowerCase();
+                    if(!seen[key]){seen[key]=1;opts.push({value:value,text:label})}
+                  });
+                }
+                [['__wax_tags__','Wax tags'],['__camera__','Camera']].forEach(function(o){
+                  if(!seen[o[0]]){seen[o[0]]=1;opts.unshift({value:o[0],text:o[1]})}
+                });
+                opts.sort(function(a,b){
+                  var rank={'__wax_tags__':0,'__camera__':1};
+                  return (rank[a.value]??9)-(rank[b.value]??9)||a.text.localeCompare(b.text);
+                });
+                b.innerHTML='';
+                opts.forEach(function(o){addRow(b,o.value,o.text,st.mon.indexOf(o.value)>=0,function(){
+                  if(this.checked){if(st.mon.indexOf(o.value)<0)st.mon.push(o.value)}
+                  else st.mon=st.mon.filter(function(v){return v!==o.value});
+                  fire('mon');render();
+                })});
+                return;
+              }
+              var s=sel(k);if(!s)return;sync(k);
+              var opts=Array.prototype.slice.call(s.options).filter(function(o){return o.value});
+              b.innerHTML='';
+              opts.forEach(function(o){addRow(b,o.value,o.text,st[k].indexOf(o.value)>=0,function(){
+                if(this.checked){if(st[k].indexOf(o.value)<0)st[k].push(o.value)}
+                else st[k]=st[k].filter(function(v){return v!==o.value});
+                fire(k);render();
+              })});
+            }
+            window.KPMonFilterValue=monFilterValue;
+            window.mfBuild=function(){build('trap');build('line');build('mon');build('status')};
+            document.addEventListener('click',function(e){
+              var b=e.target.closest('.mfHead button');if(!b)return;
+              var g=b.closest('.mfGroup');if(!g)return;
+              e.preventDefault();g.classList.toggle('open');b.textContent=g.classList.contains('open')?'Hide types':'Show types';
+            });
+            document.addEventListener('DOMContentLoaded',function(){window.mfBuild()});
+            setTimeout(function(){window.mfBuild()},300);
+          })();
+          </script>'''
+
+          s = s[:start] + new_script + s[end:]
+
+          # Replace the monitoring comparison in pass() so Wax tags and Camera
+          # are independent filter categories even when Trap.NZ uses different
+          # underlying type strings.
+          old = "if(vals.length&&vals.indexOf(t.type)<0)return false;"
+          new = "if(vals.length&&(mon?(vals.indexOf(window.KPMonFilterValue?window.KPMonFilterValue(t):t.type)<0):(vals.indexOf(t.type)<0)))return false;"
+          if old not in s:
+              raise SystemExit('pass() monitoring comparison not found')
+          s = s.replace(old,new,1)
+
+          p.write_text(s,encoding='utf-8')
+          print('Patched index.html')
+          PY
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git commit -m "Fix separate Wax tags and Camera monitoring filters"
+          git push
