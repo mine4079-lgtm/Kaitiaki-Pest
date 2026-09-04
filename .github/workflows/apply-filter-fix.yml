@@ -1,3 +1,4 @@
+# Final authoritative filter patcher — keep this as the only filter patch workflow.
 name: Apply filter controller
 on:
   push:
@@ -12,11 +13,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install final filter controller
         run: |
-          sleep 15
-          for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            git reset --hard origin/main
-            python3 - <<'PY'
+          sleep 10
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
           from pathlib import Path
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
@@ -25,7 +25,6 @@ jobs:
               end=s.find('</script>',start)
               if end < 0: raise SystemExit('final controller closing script not found')
               end += len('</script>')
-              while start>0 and s[start-1] in '\\n\\r': start -= 1
               s=s[:start]+s[end:]
           patch='''<script id="kaitiaki-final-filter-controller">
 (function(){
@@ -35,7 +34,7 @@ jobs:
   function opts(id){var e=$(id);return e?Array.prototype.slice.call(e.options).filter(function(o){return o.value}).map(function(o){return {value:o.value,text:o.text}}):[]}
   function redraw(){var q=$('search');if(q)q.dispatchEvent(new Event('input',{bubbles:true}))}
   function add(box,label,value,checked,change){var r=document.createElement('label');r.className='mfRow';var sp=document.createElement('span');sp.textContent=label;var c=document.createElement('input');c.type='checkbox';c.checked=checked;c.addEventListener('change',function(){change(value,c.checked)});r.appendChild(sp);r.appendChild(c);box.appendChild(r)}
-  function status(){var b=$('mfStatus');if(!b)return;b.innerHTML='';[['active','Active'],['retired','Retired'],['disabled','Disabled']].forEach(function(x){add(b,x[1],x[0],st.status.indexOf(x[0])>=0,function(v,on){if(on){if(st.status.indexOf(v)<0)st.status.push(v)}else{st.status=st.status.filter(function(z){return z!==v})}if(!st.status.length)st.status=['active'];redraw()})})}
+  function status(){var b=$('mfStatus');if(!b)return;b.innerHTML='';[['active','Active'],['retired','Retired'],['disabled','Disabled']].forEach(function(x){add(b,x[1],x[0],st.status.indexOf(x[0])>=0,function(v,on){if(on){if(st.status.indexOf(v)<0)st.status.push(v)}else st.status=st.status.filter(function(z){return z!==v});if(!st.status.length)st.status=['active'];redraw()})})}
   function kind(k,boxId,selId){var b=$(boxId);if(!b)return;b.innerHTML='';opts(selId).forEach(function(o){add(b,o.text,o.value,st[k].indexOf(o.value)>=0,function(v,on){if(on){if(st[k].indexOf(v)<0)st[k].push(v)}else st[k]=st[k].filter(function(z){return z!==v});redraw()})})}
   function mon(){var b=$('mfMons');if(!b)return;b.innerHTML='';var a=opts('monType'),used={};[['Wax tags',['wax tag','wax tags','waxtag','waxtags']],['Camera',['camera','cameras']]].forEach(function(x){var m=a.filter(function(o){var v=o.value.toLowerCase();return x[1].some(function(q){return v===q||v.indexOf(q)>=0})});if(m.length){m.forEach(function(o){if(!used[o.value]){used[o.value]=1;add(b,x[0],o.value,st.mon.indexOf(o.value)>=0,function(v,on){if(on){if(st.mon.indexOf(v)<0)st.mon.push(v)}else st.mon=st.mon.filter(function(z){return z!==v});redraw()})}})}else{add(b,x[0],x[0],false,function(v,on){if(on){if(st.mon.indexOf(v)<0)st.mon.push(v)}else st.mon=st.mon.filter(function(z){return z!==v});redraw()})}});a.forEach(function(o){if(!used[o.value]){used[o.value]=1;add(b,o.text,o.value,st.mon.indexOf(o.value)>=0,function(v,on){if(on){if(st.mon.indexOf(v)<0)st.mon.push(v)}else st.mon=st.mon.filter(function(z){return z!==v});redraw()})}})}
   window.mfBuild=function(){status();kind('trap','mfTraps','trapType');kind('line','mfLines','line');mon()};
@@ -48,12 +47,9 @@ jobs:
           s=s.replace('</body>',patch+'</body>')
           p.write_text(s,encoding='utf-8')
           PY
-            git add index.html
-            git diff --cached --quiet && exit 0
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'fix: final working map filters [skip ci]'
-            git push && exit 0
-            sleep 3
-          done
-          exit 1
+          git add index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: final working map filters [skip ci]'
+          git push
