@@ -13,72 +13,60 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add filter interaction patch
+      - name: Fix filters in index.html
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           p = Path('index.html')
-          s = p.read_text()
-          if 'id="filter-interaction-patch"' in s:
-              print('patch already present')
-              raise SystemExit(0)
-          patch = r'''
-<script id="filter-interaction-patch">
-(function(){
-  function valText(o){return (o && o.textContent || '').trim()}
-  function hiddenSelect(kind){
-    return kind==='line'?document.getElementById('line'):kind==='trap'?document.getElementById('trapType'):document.getElementById('monType')
-  }
-  function refreshGroup(kind){
-    var group=document.querySelector('.mfGroup[data-kind="'+kind+'"]');
-    var body=group&&group.querySelector('.mfBody'), sel=hiddenSelect(kind);
-    if(!body||!sel)return;
-    if(!body.children.length){
-      Array.prototype.slice.call(sel.options).forEach(function(o){
-        if(!o.value)return;
-        var row=document.createElement('label'); row.className='mfRow';
-        row.innerHTML='<span>'+String(o.text).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})+'</span><input type="checkbox" data-filter-value="'+String(o.value).replace(/"/g,'&quot;')+'">';
-        body.appendChild(row);
-      });
-    }
-    Array.prototype.slice.call(body.querySelectorAll('input[data-filter-value]')).forEach(function(cb){
-      cb.checked=sel.value===cb.getAttribute('data-filter-value');
-    });
-  }
-  function refreshAll(){refreshGroup('line');refreshGroup('trap');refreshGroup('mon')}
-  document.addEventListener('click',function(e){
-    var head=e.target.closest('.mfHead button');
-    if(head){
-      var g=head.closest('.mfGroup');
-      if(g){g.classList.toggle('open');head.textContent=g.classList.contains('open')?'Hide types':'Show types';refreshGroup(g.getAttribute('data-kind'));}
-      e.preventDefault(); return;
-    }
-    var cb=e.target.closest('.mfRow input[data-filter-value]');
-    if(cb){
-      var g=cb.closest('.mfGroup'), kind=g&&g.getAttribute('data-kind'), sel=hiddenSelect(kind);
-      if(sel){sel.value=cb.checked?cb.getAttribute('data-filter-value'):''; sel.dispatchEvent(new Event('change',{bubbles:true}));}
-      Array.prototype.slice.call((g&&g.querySelectorAll('input[data-filter-value]'))||[]).forEach(function(x){if(x!==cb)x.checked=false});
-      e.preventDefault();
-    }
-  },true);
-  document.addEventListener('DOMContentLoaded',function(){
-    refreshAll();
-    setTimeout(refreshAll,500); setTimeout(refreshAll,1500); setTimeout(refreshAll,3000); setTimeout(refreshAll,6000);
-  });
-  setInterval(refreshAll,5000);
-})();
-</script>
-'''
-          marker='</body>'
-          if marker not in s:
-              raise SystemExit('body marker not found')
-          p.write_text(s.replace(marker,patch+marker,1))
+          s = p.read_text(encoding='utf-8')
+
+          # The map uses these two functions. Change them from single-value
+          # filters to arrays so the Trap.NZ-style checkboxes can coexist.
+          s = re.sub(
+              r'function filters\(\)\{.*?\}\nfunction pass',
+              "function filters(){var st=window.KPFilterState||{};return{line:st.line||[],trapType:st.trap||[],monType:st.mon||[],search:$(\'search\').value.trim().toLowerCase()}}\nfunction pass",
+              s, count=1, flags=re.S)
+
+          s = re.sub(
+              r'function pass\(t,f,mon\)\{.*?\}\nfunction showTrap',
+              "function pass(t,f,mon){var k=mon?'monType':'trapType',vals=f[k]||[];if(vals.length&&vals.indexOf(t.type)<0)return false;if(f.line&&f.line.length&&f.line.indexOf(t.line)<0)return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(' ').toLowerCase().indexOf(f.search)>=0}\nfunction showTrap",
+              s, count=1, flags=re.S)
+
+          patch = r'''<script id="filter-interaction-patch">
+          (function(){
+            var st=window.KPFilterState=window.KPFilterState||{trap:[],line:[],mon:[],ready:{trap:false,line:false,mon:false}};
+            function sel(k){return document.getElementById(k==='trap'?'trapType':k==='line'?'line':'monType')}
+            function body(k){return document.getElementById(k==='trap'?'mfTraps':k==='line'?'mfLines':'mfMons')}
+            function vals(k){var s=sel(k);return s?Array.prototype.slice.call(s.options).map(function(o){return o.value}).filter(Boolean):[]}
+            function sync(k){var a=vals(k),old=st[k]||[];if(!st.ready[k]){st[k]=a.slice();st.ready[k]=true;return}var keep=old.filter(function(v){return a.indexOf(v)>=0});st[k]=keep.length?keep:a.slice()}
+            function fire(k){var s=sel(k);if(!s)return;s.value=st[k].length===1?st[k][0]:'';s.dispatchEvent(new Event('change',{bubbles:true}));s.dispatchEvent(new Event('input',{bubbles:true}))}
+            function build(k){var b=body(k),s=sel(k);if(!b||!s)return;sync(k);b.innerHTML='';Array.prototype.slice.call(s.options).forEach(function(o){if(!o.value)return;var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o.text;var cb=document.createElement('input');cb.type='checkbox';cb.checked=st[k].indexOf(o.value)>=0;cb.dataset.filterValue=o.value;cb.addEventListener('change',function(){if(cb.checked){if(st[k].indexOf(o.value)<0)st[k].push(o.value)}else{st[k]=st[k].filter(function(v){return v!==o.value})}fire(k);build(k)});row.appendChild(span);row.appendChild(cb);b.appendChild(row)})}
+            window.mfBuild=function(){build('trap');build('line');build('mon')};
+            document.addEventListener('click',function(e){var b=e.target.closest('.mfHead button');if(!b)return;var g=b.closest('.mfGroup');if(!g)return;e.preventDefault();g.classList.toggle('open');b.textContent=g.classList.contains('open')?'Hide types':'Show types'});
+            document.addEventListener('DOMContentLoaded',function(){window.mfBuild()});
+            setTimeout(function(){window.mfBuild()},300);
+          })();
+          </script>'''
+
+          s, n1 = re.subn(r'<script id="filter-interaction-patch">.*?</script>', patch, s, count=1, flags=re.S)
+          if n1 == 0:
+              marker = '</body>'
+              s = s.replace(marker, patch + marker, 1)
+          s, n2 = re.subn(r'<script id="modern-filter-js">.*?</script>', '', s, count=1, flags=re.S)
+
+          if 'function filters(){' not in s or 'function pass(t,f,mon)' not in s:
+              raise SystemExit('Could not locate map filter functions')
+
+          p.write_text(s, encoding='utf-8')
           PY
-      - name: Commit patch
+
+      - name: Commit filter fix
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          git diff --cached --quiet && exit 0
-          git commit -m 'fix: make modern filters interactive [skip ci]'
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'fix: Trap.NZ style filters [skip ci]'
           git push
