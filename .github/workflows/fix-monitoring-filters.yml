@@ -1,0 +1,38 @@
+name: fix-monitoring-filters
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix monitoring filters
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          old="function monType(m){var raw=txt(m.type),blob=[raw,m.name,m.code,m.number,m.notes,m.tag,m.tags,m.sensor,m.sensor_type].map(txt).join(' ').toLowerCase();if(/wax\\s*tag|waxtag|wax\\s*block/.test(blob))return'Wax tags';if(/camera|trail\\s*cam|camera\\s*trap|cameratrap/.test(blob))return'Camera';return raw||'Other'}"
+          new="function monType(m){var raw=txt(m.type),blob=[raw,m.name,m.code,m.number,m.notes,m.tag,m.tags,m.sensor,m.sensor_type].map(txt).join(' ').toLowerCase();if(/bird\\s*count|birdcount/.test(blob))return'Bird Count';if(/camera|trail\\s*cam|camera\\s*trap|cameratrap/.test(blob))return'Camera';if(/tracking\\s*tunnel|trackingtunnel/.test(blob))return'Tracking tunnel';if(/wax\\s*block|waxblock/.test(blob))return'Wax block';if(/wax\\s*tag|waxtag/.test(blob))return'Wax tags';return raw||'Other'}"
+          if old not in s: raise SystemExit('monType pattern not found')
+          s=s.replace(old,new)
+          old2="function buildMon(){var b=$('monTypeBody');b.innerHTML='';var vals=uniq(D.monitoring.map(monType));row(b,'Show all',F.mon.size===0,function(on){if(on)F.mon.clear();render()},'all');['Wax tags','Camera'].forEach(function(v){if(vals.indexOf(v)<0)return;row(b,v,F.mon.has(v),function(on){if(on)F.mon.add(v);else F.mon.delete(v);render()},'child')});vals.filter(function(v){return v!=='Wax tags'&&v!=='Camera'}).forEach(function(v){row(b,v,F.mon.has(v),function(on){if(on)F.mon.add(v);else F.mon.delete(v);render()},'child')})}"
+          new2="function buildMon(){var b=$('monTypeBody');b.innerHTML='';var vals=uniq(D.monitoring.map(monType)),order=['Bird Count','Camera','Tracking tunnel','Wax block','Wax tags'];row(b,'Show all',F.mon.size===0,function(on){if(on)F.mon.clear();render()},'all');order.forEach(function(v){if(vals.indexOf(v)<0)return;row(b,v,F.mon.has(v),function(on){if(on)F.mon.add(v);else F.mon.delete(v);render()},'child')});vals.filter(function(v){return order.indexOf(v)<0}).forEach(function(v){row(b,v,F.mon.has(v),function(on){if(on)F.mon.add(v);else F.mon.delete(v);render()},'child')})}"
+          if old2 not in s: raise SystemExit('buildMon pattern not found')
+          s=s.replace(old2,new2)
+          old3="if($('monToggle').checked&&z>=14)D.monitoring.forEach(function(m){if(!passMon(m)||!isFinite(m.lat)||!isFinite(m.lon)||z<15||!map.getBounds().contains([m.lat,m.lon]))return;"
+          new3="if($('monToggle').checked)D.monitoring.forEach(function(m){if(!passMon(m)||!isFinite(m.lat)||!isFinite(m.lon)||!map.getBounds().contains([m.lat,m.lon]))return;"
+          if old3 not in s: raise SystemExit('render monitoring pattern not found')
+          s=s.replace(old3,new3)
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'Fix monitoring type filters'
+          git push
