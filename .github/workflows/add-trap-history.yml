@@ -13,40 +13,67 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('index.html'); s=p.read_text()
-          if 'Kaitiaki Trap History v1' in s: raise SystemExit(0)
-          s=s.replace("const DATA={traps:[],monitoring:[],lines:[]};", "const DATA={traps:[],monitoring:[],lines:[],records:[]};\n/* Kaitiaki Trap History v1 */")
-          s=s.replace("st.put(DATA.lines,'lines');", "st.put(DATA.lines,'lines');st.put(DATA.records,'records');")
-          s=s.replace("const [traps,monitoring,lines]=await Promise.all([get('traps'),get('monitoring'),get('lines')]);", "const [traps,monitoring,lines,records]=await Promise.all([get('traps'),get('monitoring'),get('lines'),get('records')]);")
-          s=s.replace("if(Array.isArray(lines))DATA.lines=lines;", "if(Array.isArray(lines))DATA.lines=lines;if(Array.isArray(records))DATA.records=records;")
-          marker="function popup(p){"
-          history=r'''function trapHistoryHtml(trap){
-          const code=String(trap.title||trap.id||'').trim();
-          const rows=DATA.records.filter(r=>String(r.trap_code||'').trim().toLowerCase()===code.toLowerCase()).sort((a,b)=>String(b.record_date||'').localeCompare(String(a.record_date||'')));
-          if(!rows.length)return '<p class="hint">No monitoring records found for this trap.</p>';
-          return `<div class="history"><b>Monitoring history (${rows.length})</b>${rows.slice(0,20).map(r=>`<div class="history-row"><b>${esc(r.record_date||'')}</b><span>${esc(r.species_caught||'No catch')}</span><span>${esc(r.trap_status||'')}</span><span>${esc(r.recorded_by||'')}</span>${r.strikes!==undefined?`<span>Strikes: ${esc(r.strikes)}</span>`:''}${r.record_notes?`<span>${esc(r.record_notes)}</span>`:''}</div>`).join('')}${rows.length>20?`<div class="hint">Showing latest 20 records.</div>`:''}</div>`;
-          }
-          function popup(p){'''
-          s=s.replace(marker,history,1)
-          old="let el=document.createElement('div');el.className='popup';el.innerHTML=`<h3>${esc(c.title||c.name||c.id)}</h3><p><b>Type:</b> ${esc(c.type||'')}</p><p><b>Line:</b> ${esc(c.line||'—')}</p><p><b>GPS:</b> ${lat.toFixed(6)}, ${lon.toFixed(6)}</p>${details?`<div class=\"details\">${details}</div>`:''}<button class=\"nav\" onclick=\"location.href='https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}'\">Navigate</button>`;"
-          new="let el=document.createElement('div');el.className='popup';el.innerHTML=`<h3>${esc(c.title||c.name||c.id)}</h3><p><b>Type:</b> ${esc(c.type||'')}</p><p><b>Line:</b> ${esc(c.line||'—')}</p><p><b>GPS:</b> ${lat.toFixed(6)}, ${lon.toFixed(6)}</p>${details?`<div class=\"details\">${details}</div>`:''}${p.kind==='trap'?trapHistoryHtml(c):''}<button class=\"nav\" onclick=\"location.href='https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}'\">Navigate</button>`;"
-          if old not in s: raise SystemExit('popup target not found')
-          s=s.replace(old,new,1)
-          s=s.replace(".hint{font-size:12px;color:#64748b}", ".hint{font-size:12px;color:#64748b}.history{margin:10px 0;border-top:1px solid #ddd;padding-top:8px;max-height:260px;overflow:auto}.history-row{display:flex;flex-direction:column;gap:2px;padding:8px 0;border-bottom:1px solid #eee;font-size:11px}.history-row span{color:#334155}")
-          oldfeed="let[tf,mf,lf]=await Promise.all([all('trapnz-projects:default-project-traps'),all('trapnz-projects:default-project-monitoring-stations'),all('trapnz-projects:default-project-lines')]);"
-          newfeed="let[tf,mf,lf,rf]=await Promise.all([all('trapnz-projects:default-project-traps'),all('trapnz-projects:default-project-monitoring-stations'),all('trapnz-projects:default-project-lines'),all('trapnz-projects:default-project-trap-records')]);"
-          if oldfeed not in s: raise SystemExit('feed target not found')
-          s=s.replace(oldfeed,newfeed,1)
-          insert="DATA.lines=[];lf.forEach(f=>{"
-          rec="DATA.records=rf.map(f=>{let p=f.properties||{};return{trap_code:String(p.trap_code??''),trap_type:String(p.trap_type??''),trap_status:String(p.trap_status??''),trap_condition:String(p.trap_condition??''),rebaited:p.rebaited,bait_at_arrival:String(p.bait_at_arrival??''),bait_at_departure:String(p.bait_at_departure??''),strikes:p.strikes,species_caught:String(p.species_caught??''),gender:String(p.gender??''),maturity:String(p.maturity??''),record_date:String(p.record_date??''),recorded_by:String(p.recorded_by??''),record_notes:String(p.record_notes??''),prev_record_date:String(p.prev_record_date??''),next_record_date:String(p.next_record_date??'')}});\n          DATA.lines=[];lf.forEach(f=>{"
-          if insert not in s: raise SystemExit('line target not found')
-          s=s.replace(insert,rec,1)
-          p.write_text(s)
+          import re
+          p=Path('index.html'); s=p.read_text(encoding='utf-8')
+
+          # Existing trap-history patch (only if the old version is not already present).
+          if 'Kaitiaki Trap History v1' not in s:
+              s=s.replace("const DATA={traps:[],monitoring:[],lines:[]};", "const DATA={traps:[],monitoring:[],lines:[],records:[]};\n/* Kaitiaki Trap History v1 */")
+              s=s.replace("st.put(DATA.lines,'lines');", "st.put(DATA.lines,'lines');st.put(DATA.records,'records');")
+              s=s.replace("const [traps,monitoring,lines]=await Promise.all([get('traps'),get('monitoring'),get('lines')]);", "const [traps,monitoring,lines,records]=await Promise.all([get('traps'),get('monitoring'),get('lines'),get('records')]);")
+              s=s.replace("if(Array.isArray(lines))DATA.lines=lines;", "if(Array.isArray(lines))DATA.lines=lines;if(Array.isArray(records))DATA.records=records;")
+
+          # Trap status data fields.
+          oldtrap="retired:field(p,['is_retired','retired'],'0'),notes:field(p,['notes'],'')"
+          newtrap="retired:field(p,['is_retired','retired'],'0'),status:field(p,['status','trap_status','trapStatus'],''),disabled:field(p,['disabled','is_disabled','isDisabled'],'0'),enabled:field(p,['enabled','is_enabled','isEnabled'],''),notes:field(p,['notes'],'')"
+          if oldtrap in s:
+              s=s.replace(oldtrap,newtrap,1)
+
+          # Add Trap status group to the modern filter panel.
+          marker='<div class="mfGroup" data-kind="trap">'
+          status_html='''<div class="mfGroup" data-kind="status">\n  <div class="mfHead"><span>Trap status</span><button type="button">Show types</button></div>\n  <div class="mfBody" id="mfStatus"></div>\n</div>\n'''
+          if 'id="mfStatus"' not in s and marker in s:
+              s=s.replace(marker,status_html+marker,1)
+
+          # Hidden selector used by the existing filter-state bridge.
+          hidden='<div class="section" style="display:none"><select id="trapStatus"><option value="active">Active</option><option value="retired">Retired</option><option value="disabled">Disabled</option></select></div>'
+          if 'id="trapStatus"' not in s:
+              target='<div class="section" style="display:none"><b>Filter by line</b>'
+              if target in s: s=s.replace(target,hidden+target,1)
+
+          # Make rendering aware of Active/Retired/Disabled.
+          oldf="function filters(){var st=window.KPFilterState||{};return{line:st.line||[],trapType:st.trap||[],monType:st.mon||[],search:$(\'search\').value.trim().toLowerCase()}}\nfunction pass(t,f,mon){var k=mon?\'monType\':\'trapType\',vals=f[k]||[];if(vals.length&&vals.indexOf(t.type)<0)return false;if(f.line&&f.line.length&&f.line.indexOf(t.line)<0)return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(\' \').toLowerCase().indexOf(f.search)>=0}"
+          newf="function trapStatus(t){var st=text(field(t,['status','trap_status','trapStatus'],'' )).trim().toLowerCase();var dis=text(field(t,['disabled','is_disabled','isDisabled'],'' )).trim().toLowerCase();var en=text(field(t,['enabled','is_enabled','isEnabled'],'' )).trim().toLowerCase();if(dis==='1'||dis==='true'||dis==='yes'||en==='0'||en==='false'||en==='no'||st==='disabled'||st==='inactive'||st==='deactivated')return 'disabled';if(String(t.retired).toLowerCase()==='1'||String(t.retired).toLowerCase()==='true'||st==='retired')return 'retired';return 'active'}\nfunction filters(){var st=window.KPFilterState||{};return{line:st.line||[],trapType:st.trap||[],monType:st.mon||[],status:st.status&&st.status.length?st.status:['active'],search:$(\'search\').value.trim().toLowerCase()}}\nfunction pass(t,f,mon){var k=mon?\'monType\':\'trapType\',vals=f[k]||[];if(vals.length&&vals.indexOf(t.type)<0)return false;if(!mon&&f.status&&f.status.length&&f.status.indexOf(trapStatus(t))<0)return false;if(f.line&&f.line.length&&f.line.indexOf(t.line)<0)return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(\' \').toLowerCase().indexOf(f.search)>=0}"
+          if oldf in s: s=s.replace(oldf,newf,1)
+
+          # Replace the previous filter bridge with the working Trap.NZ-style groups.
+          patch=r'''<script id="filter-interaction-patch">
+          (function(){
+            var st=window.KPFilterState=window.KPFilterState||{trap:[],line:[],mon:[],status:['active'],ready:{trap:false,line:false,mon:false,status:false}};
+            function sel(k){return document.getElementById(k==='trap'?'trapType':k==='line'?'line':k==='mon'?'monType':'trapStatus')}
+            function body(k){return document.getElementById(k==='trap'?'mfTraps':k==='line'?'mfLines':k==='mon'?'mfMons':'mfStatus')}
+            function vals(k){var s=sel(k);return s?Array.prototype.slice.call(s.options).map(function(o){return o.value}).filter(Boolean):[]}
+            function sync(k){var a=vals(k),old=st[k]||[];if(!st.ready[k]){st[k]=k==='status'?(a.indexOf('active')>=0?['active']:a.slice()):a.slice();st.ready[k]=true;return}var keep=old.filter(function(v){return a.indexOf(v)>=0});st[k]=keep.length?keep:a.slice()}
+            function fire(k){var s=sel(k);if(!s)return;s.value=st[k].length===1?st[k][0]:'';s.dispatchEvent(new Event('change',{bubbles:true}));s.dispatchEvent(new Event('input',{bubbles:true}))}
+            function build(k){var b=body(k);if(!b)return;if(k==='status'){var opts=[['active','Active'],['retired','Retired'],['disabled','Disabled']];b.innerHTML='';if(!st.ready.status){st.status=['active'];st.ready.status=true}opts.forEach(function(o){var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o[1];var cb=document.createElement('input');cb.type='checkbox';cb.checked=st.status.indexOf(o[0])>=0;cb.addEventListener('change',function(){if(cb.checked){if(st.status.indexOf(o[0])<0)st.status.push(o[0])}else st.status=st.status.filter(function(v){return v!==o[0]});if(!st.status.length)st.status=['active'];render()});row.appendChild(span);row.appendChild(cb);b.appendChild(row)});return}var s=sel(k);if(!s)return;sync(k);var opts=Array.prototype.slice.call(s.options).filter(function(o){return o.value});if(k==='mon'){var seen={};opts=[['Wax tags','Wax tags'],['Camera','Camera']].map(function(x){return {value:x[0],text:x[1]}}).concat(opts.map(function(o){return {value:o.value,text:o.text}})).filter(function(o){var q=o.value.toLowerCase();if(seen[q])return false;seen[q]=1;return true})}b.innerHTML='';opts.forEach(function(o){var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o.text;var cb=document.createElement('input');cb.type='checkbox';cb.checked=st[k].indexOf(o.value)>=0;cb.dataset.filterValue=o.value;cb.addEventListener('change',function(){if(cb.checked){if(st[k].indexOf(o.value)<0)st[k].push(o.value)}else st[k]=st[k].filter(function(v){return v!==o.value});fire(k);render()});row.appendChild(span);row.appendChild(cb);b.appendChild(row)})}
+            window.mfBuild=function(){build('trap');build('line');build('mon');build('status')};
+            document.addEventListener('click',function(e){var b=e.target.closest('.mfHead button');if(!b)return;var g=b.closest('.mfGroup');if(!g)return;e.preventDefault();g.classList.toggle('open');b.textContent=g.classList.contains('open')?'Hide types':'Show types'});
+            document.addEventListener('DOMContentLoaded',function(){window.mfBuild()});
+            setTimeout(function(){window.mfBuild()},300);
+          })();
+          </script>'''
+          s,n=re.subn(r'<script id="filter-interaction-patch">.*?</script>',patch,s,count=1,flags=re.S)
+          if n==0: raise SystemExit('filter bridge not found')
+
+          # Mark the patch so this workflow is idempotent.
+          if 'Kaitiaki Filter Status v1' not in s:
+              s=s.replace('</body>','<!-- Kaitiaki Filter Status v1 -->\n</body>',1)
+          p.write_text(s,encoding='utf-8')
           PY
       - name: Commit patch
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          git diff --cached --quiet || git commit -m 'Add Trap.NZ monitoring history to trap cards'
+          git diff --cached --quiet || git commit -m 'Add active retired disabled and monitoring type filters'
           git push
