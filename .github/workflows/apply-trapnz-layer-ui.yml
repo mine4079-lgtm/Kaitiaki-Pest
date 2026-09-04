@@ -1,0 +1,33 @@
+name: Apply TrapNZ layer UI
+on:
+  push:
+    paths:
+      - 'index.html'
+      - 'trapnz-layer-ui.js'
+      - '.github/workflows/apply-trapnz-layer-ui.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inject layer UI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          tag='<script src="trapnz-layer-ui.js"></script>'
+          if tag not in s:
+              marker='</body>'
+              if marker not in s: raise SystemExit('index.html has no closing body tag')
+              s=s.replace(marker,tag+'\n'+marker,1)
+              p.write_text(s)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Apply Trap.NZ layer filter UI'
+          git push
