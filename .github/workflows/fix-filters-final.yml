@@ -1,0 +1,78 @@
+name: Fix working filters
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace filter UI with working controls
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+
+          old='function update(){render();populate();$(\'status\').textContent=DATA.traps.length?\'Trap.NZ data loaded — \'+DATA.traps.length.toLocaleString()+\' traps\':\'Map ready — sync Trap.NZ to load your project.\'}'
+          new='function update(){populate();render();if(window.mfBuild)window.mfBuild();$(\'status\').textContent=DATA.traps.length?\'Trap.NZ data loaded — \'+DATA.traps.length.toLocaleString()+\' traps\':\'Map ready — sync Trap.NZ to load your project.\'}'
+          if old not in s:
+              raise SystemExit('update target not found')
+          s=s.replace(old,new,1)
+
+          start=s.find('<script id="modern-filter-js">')
+          end=s.find('</body>',start)
+          if start<0 or end<0:
+              raise SystemExit('filter script block not found')
+
+          block=r'''<script id="modern-filter-js">
+          (function(){
+            function selectFor(kind){return document.getElementById(kind==='line'?'line':kind==='trap'?'trapType':'monType')}
+            function buildGroup(kind,id){
+              var box=document.getElementById(id),sel=selectFor(kind);if(!box||!sel)return;
+              box.innerHTML='';
+              Array.prototype.slice.call(sel.options).forEach(function(o){
+                if(!o.value)return;
+                var row=document.createElement('label');row.className='mfRow';row.setAttribute('data-kind',kind);
+                var span=document.createElement('span');span.textContent=o.text;
+                var cb=document.createElement('input');cb.type='checkbox';cb.checked=sel.value===o.value;cb.setAttribute('data-filter-value',o.value);
+                cb.addEventListener('change',function(){
+                  sel.value=cb.checked?o.value:'';
+                  Array.prototype.slice.call(box.querySelectorAll('input')).forEach(function(x){if(x!==cb)x.checked=false});
+                  sel.dispatchEvent(new Event('change',{bubbles:true}));
+                });
+                row.appendChild(span);row.appendChild(cb);box.appendChild(row);
+              });
+            }
+            window.mfBuild=function(){buildGroup('line','mfLines');buildGroup('trap','mfTraps');buildGroup('mon','mfMons');};
+            function toggleGroup(btn){var g=btn.closest('.mfGroup');if(!g)return;g.classList.toggle('open');btn.textContent=g.classList.contains('open')?'Hide types':'Show types';}
+            document.addEventListener('click',function(e){
+              var b=e.target.closest('.mfHead button');
+              if(b){e.preventDefault();toggleGroup(b);return;}
+            });
+            document.addEventListener('change',function(e){
+              if(e.target.matches('#line,#trapType,#monType'))window.mfBuild();
+            });
+            window.mfBuild();
+            setTimeout(window.mfBuild,300);
+          })();
+          </script>
+          </body></html>'''
+          s=s[:start]+block+'\n'
+          p.write_text(s)
+          PY
+      - name: Commit filter fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: make modern filters interactive [skip ci]'
+          git push
