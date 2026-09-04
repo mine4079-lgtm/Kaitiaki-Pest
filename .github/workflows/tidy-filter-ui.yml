@@ -1,0 +1,152 @@
+name: Tidy filter UI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch index.html
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('index.html')
+          s = p.read_text()
+
+          css = r'''
+          <style id="tidy-filter-css">
+          .modernFilters{margin-top:8px}
+          .modernFilters .sectionTitle{font-size:24px;font-weight:500;margin:6px 0 14px}
+          .mfGroup{border-top:1px solid #ccc;padding:12px 0}
+          .mfHead{display:flex;align-items:center;justify-content:space-between;font-size:17px;font-weight:700;min-height:42px}
+          .mfHead button{border:0;background:none;font-size:15px;padding:8px 0;color:#222}
+          .mfBody{display:none;margin-top:8px;background:#eee;overflow:hidden}
+          .mfGroup.open .mfBody{display:block}
+          .mfRow{display:flex;align-items:center;justify-content:space-between;padding:14px 12px 14px 16px;border-bottom:1px solid #ddd;font-size:16px;min-height:52px}
+          .mfRow:last-child{border-bottom:0}
+          .mfRow input{width:24px;height:24px;accent-color:#111;margin:0;flex:0 0 auto}
+          .mfToggle{display:flex;align-items:center;justify-content:space-between;padding:13px 0;font-size:17px;font-weight:650}
+          .mfSwitch{appearance:none;width:54px;height:30px;border-radius:18px;background:#ddd;position:relative;margin:0;border:1px solid #111}
+          .mfSwitch:after{content:"";position:absolute;width:24px;height:24px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 1px 3px #0004}
+          .mfSwitch:checked{background:#000}
+          .mfSwitch:checked:after{left:27px}
+          .mfQuick{border-top:1px solid #ccc;padding:2px 0}
+          </style>
+          '''
+          if 'id="tidy-filter-css"' not in s:
+              s = s.replace('</head>', css + '</head>', 1)
+
+          start = s.find('<div class="modernFilters" id="modernFilters">')
+          if start < 0:
+              raise SystemExit('modern filter block not found')
+          end = s.find('<div class="section" style="display:none"><b>Filter by line</b>', start)
+          if end < 0:
+              raise SystemExit('hidden filter block not found')
+
+          ui = r'''<div class="modernFilters" id="modernFilters">
+          <div class="sectionTitle">Filters</div>
+          <div class="mfQuick">
+            <label class="mfToggle"><span>Baitstations</span><input class="mfSwitch" id="mfBait" type="checkbox"></label>
+            <label class="mfToggle"><span>Traps</span><input class="mfSwitch" id="mfTrapsToggle" type="checkbox" checked></label>
+          </div>
+          <div class="mfGroup" data-kind="trap">
+            <div class="mfHead"><span>Trap types</span><button type="button">Show types</button></div>
+            <div class="mfBody" id="mfTraps"></div>
+          </div>
+          <div class="mfGroup" data-kind="line">
+            <div class="mfHead"><span>Trap lines</span><button type="button">Show types</button></div>
+            <div class="mfBody" id="mfLines"></div>
+          </div>
+          <div class="mfGroup" data-kind="mon">
+            <div class="mfHead"><span>Monitoring Sites</span><button type="button">Show types</button></div>
+            <div class="mfBody" id="mfMons"></div>
+          </div>
+          <div class="mfQuick">
+            <label class="mfToggle"><span>Points of interest</span><input class="mfSwitch" id="mfPoi" type="checkbox"></label>
+            <label class="mfToggle"><span>Only sensor enabled</span><input class="mfSwitch" id="mfSensor" type="checkbox"></label>
+          </div>
+          </div>
+          '''
+          s = s[:start] + ui + s[end:]
+
+          old_start = s.find('<script id="modern-filter-js">')
+          if old_start >= 0:
+              old_end = s.find('</script>', old_start)
+              if old_end >= 0:
+                  old_end += len('</script>')
+                  s = s[:old_start] + s[old_end:]
+
+          js = r'''<script id="modern-filter-js">
+          (function(){
+            function selFor(kind){return document.getElementById(kind==='line'?'line':kind==='trap'?'trapType':'monType')}
+            function fire(sel){
+              if(!sel)return;
+              sel.dispatchEvent(new Event('change',{bubbles:true}));
+              sel.dispatchEvent(new Event('input',{bubbles:true}));
+            }
+            function build(kind,id){
+              var box=document.getElementById(id),sel=selFor(kind);
+              if(!box||!sel)return;
+              var current=sel.value;
+              box.innerHTML='';
+              Array.prototype.slice.call(sel.options).forEach(function(o){
+                if(!o.value)return;
+                var row=document.createElement('label'); row.className='mfRow';
+                var span=document.createElement('span'); span.textContent=o.text;
+                var cb=document.createElement('input'); cb.type='checkbox'; cb.checked=(current===o.value); cb.dataset.value=o.value;
+                cb.addEventListener('change',function(){
+                  if(cb.checked){
+                    sel.value=o.value;
+                    Array.prototype.slice.call(box.querySelectorAll('input')).forEach(function(x){if(x!==cb)x.checked=false});
+                  }else if(sel.value===o.value){sel.value='';}
+                  fire(sel);
+                });
+                row.appendChild(span); row.appendChild(cb); box.appendChild(row);
+              });
+            }
+            window.mfBuild=function(){build('trap','mfTraps');build('line','mfLines');build('mon','mfMons');};
+            function syncVisibility(){
+              var t=document.getElementById('showTraps'),m=document.getElementById('showMon'),l=document.getElementById('showLines');
+              var tt=document.getElementById('mfTrapsToggle');
+              if(tt&&t)tt.checked=t.checked;
+              if(tt&&t)tt.onchange=function(){t.checked=tt.checked;fire(t);};
+              ['mfBait','mfPoi','mfSensor'].forEach(function(id){var x=document.getElementById(id);if(x)x.addEventListener('change',function(){})});
+            }
+            document.addEventListener('click',function(e){
+              var b=e.target.closest('.mfHead button');
+              if(!b)return;
+              e.preventDefault();
+              var g=b.closest('.mfGroup');
+              if(!g)return;
+              g.classList.toggle('open');
+              b.textContent=g.classList.contains('open')?'Hide types':'Show types';
+            });
+            document.addEventListener('change',function(e){
+              if(e.target.matches('#line,#trapType,#monType'))setTimeout(window.mfBuild,0);
+            });
+            window.mfBuild(); syncVisibility();
+            setTimeout(window.mfBuild,300);setTimeout(window.mfBuild,1200);setTimeout(window.mfBuild,2500);
+          })();
+          </script>
+          '''
+          s = s.replace('</body>', js + '</body>', 1)
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: tidy filters and preserve map state [skip ci]'
+          git push
