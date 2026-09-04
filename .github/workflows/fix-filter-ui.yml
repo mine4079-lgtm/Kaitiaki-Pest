@@ -1,0 +1,111 @@
+name: Fix filter UI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch index.html filters
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+
+          # Make the map renderer use multi-select filter state instead of the old single-value selects.
+          old_filters = "function filters(){return{line:$(\'line\').value,trapType:$(\'trapType\').value,monType:$(\'monType\').value,search:$(\'search\').value.trim().toLowerCase()}}"
+          new_filters = "function filters(){var st=window.KPFilterState||{};return{line:st.line||[],trapType:st.trap||[],monType:st.mon||[],search:$(\'search\').value.trim().toLowerCase()}}"
+          if old_filters not in s:
+              raise SystemExit('filters() target not found')
+          s = s.replace(old_filters, new_filters, 1)
+
+          old_pass = "function pass(t,f,mon){if(f.line&&t.line!==f.line)return false;var k=mon?'monType':'trapType';if(f[k]&&t.type!==f[k])return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(' ').toLowerCase().indexOf(f.search)>=0}"
+          new_pass = "function pass(t,f,mon){var k=mon?'monType':'trapType',vals=f[k]||[];if(vals.length&&vals.indexOf(t.type)<0)return false;if(f.line&&f.line.length&&f.line.indexOf(t.line)<0)return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(' ').toLowerCase().indexOf(f.search)>=0}"
+          if old_pass not in s:
+              raise SystemExit('pass() target not found')
+          s = s.replace(old_pass, new_pass, 1)
+
+          clean = r'''<script id="filter-interaction-patch">
+          (function(){
+            var st=window.KPFilterState=window.KPFilterState||{trap:[],line:[],mon:[],ready:{trap:false,line:false,mon:false}};
+            function sel(kind){return document.getElementById(kind==='trap'?'trapType':kind==='line'?'line':'monType')}
+            function body(kind){return document.getElementById(kind==='trap'?'mfTraps':kind==='line'?'mfLines':'mfMons')}
+            function values(kind){var s=sel(kind);return s?Array.prototype.slice.call(s.options).map(function(o){return o.value}).filter(Boolean):[]}
+            function keepOrAll(kind){
+              var all=values(kind), old=st[kind];
+              if(!st.ready[kind]){st[kind]=all.slice();st.ready[kind]=true;return}
+              var kept=(old||[]).filter(function(v){return all.indexOf(v)>=0});
+              st[kind]=kept.length?kept:all.slice();
+            }
+            function fire(kind){
+              var s=sel(kind); if(!s)return;
+              s.value=st[kind].length===1?st[kind][0]:'';
+              s.dispatchEvent(new Event('change',{bubbles:true}));
+              s.dispatchEvent(new Event('input',{bubbles:true}));
+            }
+            function build(kind){
+              var b=body(kind); if(!b)return;
+              keepOrAll(kind);
+              b.innerHTML='';
+              values(kind).forEach(function(v){
+                var o=Array.prototype.slice.call(sel(kind).options).find(function(x){return x.value===v});
+                var row=document.createElement('label');row.className='mfRow';
+                var span=document.createElement('span');span.textContent=o?o.text:v;
+                var cb=document.createElement('input');cb.type='checkbox';cb.checked=st[kind].indexOf(v)>=0;cb.dataset.filterValue=v;
+                cb.addEventListener('change',function(){
+                  if(cb.checked){if(st[kind].indexOf(v)<0)st[kind].push(v)}
+                  else{st[kind]=st[kind].filter(function(x){return x!==v})}
+                  fire(kind);
+                  build(kind);
+                });
+                row.appendChild(span);row.appendChild(cb);b.appendChild(row);
+              });
+            }
+            window.mfBuild=function(){build('trap');build('line');build('mon')};
+            document.addEventListener('click',function(e){
+              var b=e.target.closest('.mfHead button');
+              if(!b)return;
+              var g=b.closest('.mfGroup');if(!g)return;
+              e.preventDefault();g.classList.toggle('open');b.textContent=g.classList.contains('open')?'Hide types':'Show types';
+            });
+            document.addEventListener('change',function(e){
+              if(e.target.matches('#line,#trapType,#monType')){setTimeout(function(){window.mfBuild()},0)}
+            });
+            document.addEventListener('DOMContentLoaded',function(){window.mfBuild()});
+            setTimeout(function(){window.mfBuild()},250);
+          })();
+          </script>'''
+
+          s, n1 = re.subn(r'<script id="filter-interaction-patch">.*?</script>', clean, s, count=1, flags=re.S)
+          s, n2 = re.subn(r'<script id="modern-filter-js">.*?</script>', '', s, count=1, flags=re.S)
+          if n1 != 1 or n2 != 1:
+              raise SystemExit(f'filter script replacement failed: {n1}, {n2}')
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "No changes needed"
+          else
+            git commit -m "Fix Trap.NZ style filters"
+            git push origin main
+          fi
