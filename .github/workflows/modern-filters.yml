@@ -1,0 +1,44 @@
+name: Modern filter UI patch
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add modern filter UI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          css='''\n<style id="modern-filter-css">\n.modernFilters{margin-top:8px}.mfGroup{border-top:1px solid #ccc;padding:14px 0}.mfHead{display:flex;align-items:center;justify-content:space-between;font-size:17px;font-weight:700}.mfHead button{border:0;background:none;font-size:15px;padding:5px 0}.mfBody{display:none;margin-top:8px;background:#eee;border-radius:2px;overflow:hidden}.mfGroup.open .mfBody{display:block}.mfRow{display:flex;align-items:center;justify-content:space-between;padding:13px 12px 13px 16px;border-bottom:1px solid #ddd;font-size:16px}.mfRow:last-child{border-bottom:0}.mfRow input{width:24px;height:24px;accent-color:#111;margin:0}.mfToggle{display:flex;align-items:center;justify-content:space-between;padding:12px 0;font-size:17px;font-weight:650}.mfSwitch{appearance:none;width:54px;height:30px;border-radius:18px;background:#ddd;position:relative;margin:0}.mfSwitch:after{content:"";position:absolute;width:24px;height:24px;border-radius:50%;background:#fff;top:3px;left:3px;box-shadow:0 1px 3px #0004}.mfSwitch:checked{background:#000}.mfSwitch:checked:after{left:27px}.modernFilters .sectionTitle{font-size:24px;font-weight:500;margin:6px 0 14px}\n</style>\n'''
+          if 'id="modern-filter-css"' not in s:
+              s=s.replace('</head>',css+'</head>',1)
+          marker='<div class="section"><b>Filter by line</b><select id="line"><option value="">All lines</option></select></div>'
+          replacement='''<div class="modernFilters" id="modernFilters">\n<div class="sectionTitle">Filters</div>\n<div class="mfGroup open" data-kind="line"><div class="mfHead"><span>Trap lines</span><button type="button">Show types</button></div><div class="mfBody" id="mfLines"></div></div>\n<div class="mfGroup" data-kind="trap"><div class="mfHead"><span>Traps</span><button type="button">Show types</button></div><div class="mfBody" id="mfTraps"></div></div>\n<div class="mfGroup" data-kind="mon"><div class="mfHead"><span>Monitoring</span><button type="button">Show types</button></div><div class="mfBody" id="mfMons"></div></div>\n</div>\n<div class="section" style="display:none"><b>Filter by line</b><select id="line"><option value="">All lines</option></select></div>'''
+          if marker in s and 'id="modernFilters"' not in s:
+              s=s.replace(marker,replacement,1)
+          marker2='<div class="section"><b>Trap type</b><select id="trapType"><option value="">All trap types</option></select></div><div class="section"><b>Monitoring type</b><select id="monType"><option value="">All monitoring types</option></select></div>'
+          if marker2 in s:
+              s=s.replace(marker2,'<div class="section" style="display:none"><b>Trap type</b><select id="trapType"><option value="">All trap types</option></select></div><div class="section" style="display:none"><b>Monitoring type</b><select id="monType"><option value="">All monitoring types</option></select></div>',1)
+          js='''\n<script id="modern-filter-js">\n(function(){\nfunction mfBuild(){var root=document.getElementById('modernFilters');if(!root)return;function fill(id,sel,all){var box=document.getElementById(id);if(!box)return;box.innerHTML='';var opts=[].slice.call(document.querySelectorAll(sel+' option'));opts.forEach(function(o,i){var row=document.createElement('label');row.className='mfRow';var cb=document.createElement('input');cb.type='checkbox';cb.checked=(o.value===''?document.querySelector(sel).value==='':document.querySelector(sel).value===o.value);cb.dataset.value=o.value;cb.onchange=function(){var select=document.querySelector(sel);select.value=this.checked?this.dataset.value:'';select.dispatchEvent(new Event('change',{bubbles:true}));[].slice.call(box.querySelectorAll('input')).forEach(function(x){if(x!==cb)x.checked=false})};row.appendChild(document.createTextNode(o.textContent));row.appendChild(cb);box.appendChild(row)});}\nfill('mfLines','#line');fill('mfTraps','#trapType');fill('mfMons','#monType');\n[].slice.call(root.querySelectorAll('.mfHead button')).forEach(function(b){b.onclick=function(){b.parentElement.parentElement.classList.toggle('open')}});\n}\nvar old=window.populateFilters;mfBuild();var mo=new MutationObserver(function(){mfBuild()});var d=document.getElementById('drawer');if(d)mo.observe(d,{childList:true,subtree:true});setTimeout(mfBuild,1000);setTimeout(mfBuild,2500);\n})();\n</script>\n'''
+          if 'id="modern-filter-js"' not in s:
+              s=s.replace('</body>',js+'</body>',1)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'feat: modern collapsible map filters [skip ci]'
+          git push
