@@ -12,6 +12,25 @@
 <style id="modern-filter-css">
 .modernFilters{margin-top:8px}.mfGroup{border-top:1px solid #ccc;padding:14px 0}.mfHead{display:flex;align-items:center;justify-content:space-between;font-size:17px;font-weight:700}.mfHead button{border:0;background:none;font-size:15px;padding:5px 0}.mfBody{display:none;margin-top:8px;background:#eee;border-radius:2px;overflow:hidden}.mfGroup.open .mfBody{display:block}.mfRow{display:flex;align-items:center;justify-content:space-between;padding:13px 12px 13px 16px;border-bottom:1px solid #ddd;font-size:16px}.mfRow:last-child{border-bottom:0}.mfRow input{width:24px;height:24px;accent-color:#111;margin:0}.mfToggle{display:flex;align-items:center;justify-content:space-between;padding:12px 0;font-size:17px;font-weight:650}.mfSwitch{appearance:none;width:54px;height:30px;border-radius:18px;background:#ddd;position:relative;margin:0}.mfSwitch:after{content:"";position:absolute;width:24px;height:24px;border-radius:50%;background:#fff;top:3px;left:3px;box-shadow:0 1px 3px #0004}.mfSwitch:checked{background:#000}.mfSwitch:checked:after{left:27px}.modernFilters .sectionTitle{font-size:24px;font-weight:500;margin:6px 0 14px}
 </style>
+
+<style id="tidy-filter-css">
+.modernFilters{margin-top:8px}
+.modernFilters .sectionTitle{font-size:24px;font-weight:500;margin:6px 0 14px}
+.mfGroup{border-top:1px solid #ccc;padding:12px 0}
+.mfHead{display:flex;align-items:center;justify-content:space-between;font-size:17px;font-weight:700;min-height:42px}
+.mfHead button{border:0;background:none;font-size:15px;padding:8px 0;color:#222}
+.mfBody{display:none;margin-top:8px;background:#eee;overflow:hidden}
+.mfGroup.open .mfBody{display:block}
+.mfRow{display:flex;align-items:center;justify-content:space-between;padding:14px 12px 14px 16px;border-bottom:1px solid #ddd;font-size:16px;min-height:52px}
+.mfRow:last-child{border-bottom:0}
+.mfRow input{width:24px;height:24px;accent-color:#111;margin:0;flex:0 0 auto}
+.mfToggle{display:flex;align-items:center;justify-content:space-between;padding:13px 0;font-size:17px;font-weight:650}
+.mfSwitch{appearance:none;width:54px;height:30px;border-radius:18px;background:#ddd;position:relative;margin:0;border:1px solid #111}
+.mfSwitch:after{content:"";position:absolute;width:24px;height:24px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 1px 3px #0004}
+.mfSwitch:checked{background:#000}
+.mfSwitch:checked:after{left:27px}
+.mfQuick{border-top:1px solid #ccc;padding:2px 0}
+</style>
 </head>
 <body><div id="app"><div id="map"></div>
 <div class="top"><div class="pill" id="counts">0 traps • 0 monitoring • 0 lines</div><div class="actions"><button class="btn" id="filterBtn">☰</button><button class="btn" id="syncBtn">↻</button></div></div>
@@ -22,9 +41,26 @@
 <div class="section"><b>Layers</b><label><input id="showTraps" type="checkbox" checked> Traps</label><label><input id="showMon" type="checkbox" checked> Monitoring</label><label><input id="showLines" type="checkbox" checked> Trap lines</label><label><input id="showNumbers" type="checkbox" checked> Trap numbers</label><label><input id="showLineNames" type="checkbox" checked> Line names</label><label><input id="showMonNames" type="checkbox" checked> Monitoring names</label></div>
 <div class="modernFilters" id="modernFilters">
 <div class="sectionTitle">Filters</div>
-<div class="mfGroup open" data-kind="line"><div class="mfHead"><span>Trap lines</span><button type="button">Show types</button></div><div class="mfBody" id="mfLines"></div></div>
-<div class="mfGroup" data-kind="trap"><div class="mfHead"><span>Traps</span><button type="button">Show types</button></div><div class="mfBody" id="mfTraps"></div></div>
-<div class="mfGroup" data-kind="mon"><div class="mfHead"><span>Monitoring</span><button type="button">Show types</button></div><div class="mfBody" id="mfMons"></div></div>
+<div class="mfQuick">
+  <label class="mfToggle"><span>Baitstations</span><input class="mfSwitch" id="mfBait" type="checkbox"></label>
+  <label class="mfToggle"><span>Traps</span><input class="mfSwitch" id="mfTrapsToggle" type="checkbox" checked></label>
+</div>
+<div class="mfGroup" data-kind="trap">
+  <div class="mfHead"><span>Trap types</span><button type="button">Show types</button></div>
+  <div class="mfBody" id="mfTraps"></div>
+</div>
+<div class="mfGroup" data-kind="line">
+  <div class="mfHead"><span>Trap lines</span><button type="button">Show types</button></div>
+  <div class="mfBody" id="mfLines"></div>
+</div>
+<div class="mfGroup" data-kind="mon">
+  <div class="mfHead"><span>Monitoring Sites</span><button type="button">Show types</button></div>
+  <div class="mfBody" id="mfMons"></div>
+</div>
+<div class="mfQuick">
+  <label class="mfToggle"><span>Points of interest</span><input class="mfSwitch" id="mfPoi" type="checkbox"></label>
+  <label class="mfToggle"><span>Only sensor enabled</span><input class="mfSwitch" id="mfSensor" type="checkbox"></label>
+</div>
 </div>
 <div class="section" style="display:none"><b>Filter by line</b><select id="line"><option value="">All lines</option></select></div><div class="section" style="display:none"><b>Trap type</b><select id="trapType"><option value="">All trap types</option></select></div><div class="section" style="display:none"><b>Monitoring type</b><select id="monType"><option value="">All monitoring types</option></select></div><div class="section"><input id="search" type="text" placeholder="Search trap, site or line..."></div>
 <div class="section"><b>Base map</b><label><input type="radio" name="base" value="street" checked> Street</label><label><input type="radio" name="base" value="satellite"> Satellite</label><label><input type="radio" name="base" value="topo"> Topographic</label><input id="linzKey" type="text" placeholder="LINZ API key"><button class="danger" id="saveKey">Save LINZ key</button><div class="hint" id="mapStatus">Street map works without a LINZ key.</div></div>
@@ -65,38 +101,7 @@ async function init(){try{await loadLeaflet()}catch(e){$('status').textContent='
 $('filterBtn').onclick=function(){$('drawer').classList.add('open')};$('close').onclick=function(){$('drawer').classList.remove('open')};$('syncBtn').onclick=syncTrapNZ;$('sync2').onclick=syncTrapNZ;$('zin').onclick=function(){map.zoomIn()};$('zout').onclick=function(){map.zoomOut()};$('centre').onclick=function(){map.fitBounds(bounds(),{padding:[50,100],animate:false})};$('gps').onclick=function(){if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){map.flyTo([p.coords.latitude,p.coords.longitude],Math.max(map.getZoom(),16),{animate:false})})};$('searchBtn').onclick=function(){$('drawer').classList.add('open');setTimeout(function(){$('search').focus()},200)};['line','trapType','monType','search','showTraps','showMon','showLines','showNumbers','showLineNames','showMonNames'].forEach(function(id){$(id).addEventListener('input',update)});document.querySelectorAll('input[name="base"]').forEach(function(r){r.onchange=function(){setBase(r.value)}});$('saveKey').onclick=function(){localStorage.setItem('kp_linz_key',$('linzKey').value.trim());$('mapStatus').textContent='LINZ key saved on this phone.';setBase(document.querySelector('input[name="base"]:checked').value)};$('linzKey').value=localStorage.getItem('kp_linz_key')||'';init();
 })();
 </script>
-<script id="modern-filter-js">
-(function(){
-  function selectFor(kind){return document.getElementById(kind==='line'?'line':kind==='trap'?'trapType':'monType')}
-  function buildGroup(kind,id){
-    var box=document.getElementById(id),sel=selectFor(kind);if(!box||!sel)return;
-    box.innerHTML='';
-    Array.prototype.slice.call(sel.options).forEach(function(o){
-      if(!o.value)return;
-      var row=document.createElement('label');row.className='mfRow';row.setAttribute('data-kind',kind);
-      var span=document.createElement('span');span.textContent=o.text;
-      var cb=document.createElement('input');cb.type='checkbox';cb.checked=sel.value===o.value;cb.setAttribute('data-filter-value',o.value);
-      cb.addEventListener('change',function(){
-        sel.value=cb.checked?o.value:'';
-        Array.prototype.slice.call(box.querySelectorAll('input')).forEach(function(x){if(x!==cb)x.checked=false});
-        sel.dispatchEvent(new Event('change',{bubbles:true}));
-      });
-      row.appendChild(span);row.appendChild(cb);box.appendChild(row);
-    });
-  }
-  window.mfBuild=function(){buildGroup('line','mfLines');buildGroup('trap','mfTraps');buildGroup('mon','mfMons');};
-  function toggleGroup(btn){var g=btn.closest('.mfGroup');if(!g)return;g.classList.toggle('open');btn.textContent=g.classList.contains('open')?'Hide types':'Show types';}
-  document.addEventListener('click',function(e){
-    var b=e.target.closest('.mfHead button');
-    if(b){e.preventDefault();toggleGroup(b);return;}
-  });
-  document.addEventListener('change',function(e){
-    if(e.target.matches('#line,#trapType,#monType'))window.mfBuild();
-  });
-  window.mfBuild();
-  setTimeout(window.mfBuild,300);
-})();
-</script>
+
 <script id="filter-interaction-patch">(function(){
   function hiddenSelect(kind){return kind==='line'?document.getElementById('line'):kind==='trap'?document.getElementById('trapType'):document.getElementById('monType')}
   function refreshGroup(kind){
@@ -114,4 +119,56 @@ $('filterBtn').onclick=function(){$('drawer').classList.add('open')};$('close').
   document.addEventListener('DOMContentLoaded',function(){refreshAll();setTimeout(refreshAll,500);setTimeout(refreshAll,1500);setTimeout(refreshAll,3000);setTimeout(refreshAll,6000)});
   setInterval(refreshAll,5000)
 })();</script>
+<script id="modern-filter-js">
+(function(){
+  function selFor(kind){return document.getElementById(kind==='line'?'line':kind==='trap'?'trapType':'monType')}
+  function fire(sel){
+    if(!sel)return;
+    sel.dispatchEvent(new Event('change',{bubbles:true}));
+    sel.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  function build(kind,id){
+    var box=document.getElementById(id),sel=selFor(kind);
+    if(!box||!sel)return;
+    var current=sel.value;
+    box.innerHTML='';
+    Array.prototype.slice.call(sel.options).forEach(function(o){
+      if(!o.value)return;
+      var row=document.createElement('label'); row.className='mfRow';
+      var span=document.createElement('span'); span.textContent=o.text;
+      var cb=document.createElement('input'); cb.type='checkbox'; cb.checked=(current===o.value); cb.dataset.value=o.value;
+      cb.addEventListener('change',function(){
+        if(cb.checked){
+          sel.value=o.value;
+          Array.prototype.slice.call(box.querySelectorAll('input')).forEach(function(x){if(x!==cb)x.checked=false});
+        }else if(sel.value===o.value){sel.value='';}
+        fire(sel);
+      });
+      row.appendChild(span); row.appendChild(cb); box.appendChild(row);
+    });
+  }
+  window.mfBuild=function(){build('trap','mfTraps');build('line','mfLines');build('mon','mfMons');};
+  function syncVisibility(){
+    var t=document.getElementById('showTraps'),m=document.getElementById('showMon'),l=document.getElementById('showLines');
+    var tt=document.getElementById('mfTrapsToggle');
+    if(tt&&t)tt.checked=t.checked;
+    if(tt&&t)tt.onchange=function(){t.checked=tt.checked;fire(t);};
+    ['mfBait','mfPoi','mfSensor'].forEach(function(id){var x=document.getElementById(id);if(x)x.addEventListener('change',function(){})});
+  }
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('.mfHead button');
+    if(!b)return;
+    e.preventDefault();
+    var g=b.closest('.mfGroup');
+    if(!g)return;
+    g.classList.toggle('open');
+    b.textContent=g.classList.contains('open')?'Hide types':'Show types';
+  });
+  document.addEventListener('change',function(e){
+    if(e.target.matches('#line,#trapType,#monType'))setTimeout(window.mfBuild,0);
+  });
+  window.mfBuild(); syncVisibility();
+  setTimeout(window.mfBuild,300);setTimeout(window.mfBuild,1200);setTimeout(window.mfBuild,2500);
+})();
+</script>
 </body></html>
