@@ -1,4 +1,4 @@
-name: Apply TrapNZ style filters
+name: Rebuild TrapNZ style filter panel
 on:
   push:
     paths:
@@ -10,53 +10,101 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Patch index.html
+      - name: Patch filter panel
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('index.html')
-          s=p.read_text()
-          old="""function filters(){return{line:$(\'line\').value,trapType:$(\'trapType\').value,monType:$(\'monType\').value,search:$(\'search\').value.trim().toLowerCase()}}\nfunction pass(t,f,mon){if(f.line&&t.line!==f.line)return false;var k=mon?\'monType\':\'trapType\';if(f[k]&&t.type!==f[k])return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(\' \').toLowerCase().indexOf(f.search)>=0}"""
-          new="""function selectedFilterValues(kind){var id=kind===\'line\'?\'mfLines\':kind===\'trap\'?\'mfTraps\':\'mfMons\',box=$(id);if(box){var checks=Array.prototype.slice.call(box.querySelectorAll(\'input[data-filter-value]\'));if(checks.length)return checks.filter(function(c){return c.checked}).map(function(c){return c.getAttribute(\'data-filter-value\')}).filter(Boolean)}return []}\nfunction filters(){var lineVals=selectedFilterValues(\'line\'),trapVals=selectedFilterValues(\'trap\'),monVals=selectedFilterValues(\'mon\');return{lines:lineVals,trapTypes:trapVals,monTypes:monVals,line:$(\'line\').value,trapType:$(\'trapType\').value,monType:$(\'monType\').value,search:$(\'search\').value.trim().toLowerCase()}}\nfunction pass(t,f,mon){var kind=mon?\'mon\':\'trap\',box=$(kind===\'mon\'?\'mfMons\':\'mfTraps\'),checks=box?Array.prototype.slice.call(box.querySelectorAll(\'input[data-filter-value]\')):[],vals=mon?f.monTypes:f.trapTypes;if(checks.length&&!vals.length)return false;if(vals&&vals.length&&vals.indexOf(t.type)<0)return false;if(!mon){var lbox=$(\'mfLines\'),lchecks=lbox?Array.prototype.slice.call(lbox.querySelectorAll(\'input[data-filter-value]\')):[],lines=f.lines;if(lchecks.length&&!lines.length)return false;if(lines&&lines.length&&lines.indexOf(t.line)<0)return false}if(!checks.length){if(mon&&f.monType&&t.type!==f.monType)return false;if(!mon&&f.trapType&&t.type!==f.trapType)return false}if(!mon&&(!f.lines||!f.lines.length)&&f.line&&t.line!==f.line)return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(\' \').toLowerCase().indexOf(f.search)>=0}"""
-          if old not in s: raise SystemExit('filters block not found')
-          s=s.replace(old,new,1)
-          a=s.index('<script id="filter-interaction-patch">'); b=s.index('</script>',a)+9
-          s=s[:a]+'''<script id="filter-interaction-patch">(function(){
-  function hiddenSelect(kind){return kind==='line'?document.getElementById('line'):kind==='trap'?document.getElementById('trapType'):document.getElementById('monType')}
-  function refreshGroup(kind){var group=document.querySelector('.mfGroup[data-kind="'+kind+'"]'),body=group&&group.querySelector('.mfBody'),sel=hiddenSelect(kind);if(!body||!sel)return;if(!body.children.length){Array.prototype.slice.call(sel.options).forEach(function(o){if(!o.value)return;var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o.text;var cb=document.createElement('input');cb.type='checkbox';cb.setAttribute('data-filter-value',o.value);cb.checked=true;row.appendChild(span);row.appendChild(cb);body.appendChild(row)})}Array.prototype.slice.call(body.querySelectorAll('input[data-filter-value]')).forEach(function(cb){if(cb.dataset.initialized)return;cb.dataset.initialized='1';cb.addEventListener('change',function(){var vals=Array.prototype.slice.call(body.querySelectorAll('input[data-filter-value]')).filter(function(x){return x.checked}).map(function(x){return x.getAttribute('data-filter-value')});sel.value='';sel.setAttribute('data-modern-values',JSON.stringify(vals));sel.dispatchEvent(new Event('input',{bubbles:true}))})})}
-  function refreshAll(){refreshGroup('trap');refreshGroup('line');refreshGroup('mon')}
-  document.addEventListener('click',function(e){var head=e.target.closest('.mfHead button');if(head){var g=head.closest('.mfGroup');if(g){g.classList.toggle('open');head.textContent=g.classList.contains('open')?(g.getAttribute('data-kind')==='line'?'Hide lines':'Hide types'):(g.getAttribute('data-kind')==='line'?'Show lines':'Show types')}e.preventDefault();return}},true);
-  document.addEventListener('DOMContentLoaded',refreshAll);setTimeout(refreshAll,500);setTimeout(refreshAll,1500);setTimeout(refreshAll,3000)
-})();</script>'''+s[b:]
-          a=s.index('<script id="modern-filter-js">'); b=s.index('</script>',a)+9
-          s=s[:a]+'''<script id="modern-filter-js">(function(){
-  function selFor(kind){return document.getElementById(kind==='line'?'line':kind==='trap'?'trapType':'monType')}
-  function fire(sel){if(sel)sel.dispatchEvent(new Event('input',{bubbles:true}))}
-  function build(kind,id){var box=document.getElementById(id),sel=selFor(kind);if(!box||!sel)return;Array.prototype.slice.call(box.querySelectorAll('input[data-filter-value]')).forEach(function(cb){if(cb.dataset.wired)return;cb.dataset.wired='1';cb.checked=true;cb.addEventListener('change',function(){sel.value='';sel.setAttribute('data-modern-values',JSON.stringify(Array.prototype.slice.call(box.querySelectorAll('input[data-filter-value]')).filter(function(x){return x.checked}).map(function(x){return x.getAttribute('data-filter-value')})));fire(sel)})})}
-  window.mfBuild=function(){build('trap','mfTraps');build('line','mfLines');build('mon','mfMons')};
-  function syncVisibility(){var t=document.getElementById('showTraps'),tt=document.getElementById('mfTrapsToggle');if(tt&&t&&!tt.dataset.wired){tt.dataset.wired='1';tt.checked=t.checked;tt.addEventListener('change',function(){t.checked=tt.checked;t.dispatchEvent(new Event('input',{bubbles:true}))})}}
-  window.mfBuild();syncVisibility();setTimeout(window.mfBuild,300);setTimeout(window.mfBuild,1200);setTimeout(window.mfBuild,2500)
-})();</script>'''+s[b:]
           import re
-          s=re.sub(r'<div class="section"><b>Layers</b>.*?</div>\n<div class="modernFilters"', '<div class="section" style="display:none"><b>Layers</b>\n<div class="modernFilters"', s, count=1, flags=re.S)
-          s=s.replace('<div class="mfHead"><span>Trap lines</span><button type="button">Show types</button></div>','<div class="mfHead"><span>Trap lines</span><button type="button">Show lines</button></div>')
-          p.write_text(s)
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+
+          css='''<style id="layer-filter-css">
+          .legacyLayers{display:none!important}.mfLayer{display:flex!important;align-items:center;justify-content:space-between;width:100%;padding:0!important}.mfLayer span{font-weight:700}.mfHead{gap:10px}.mfHead button{white-space:nowrap}.mfSubTitle{padding:10px 12px 5px;font-size:13px;font-weight:800;color:#555;background:#eee}.mfBody{background:#eee}
+          </style>'''
+          if 'id="layer-filter-css"' not in s:
+              s=s.replace('</head>',css+'\n</head>',1)
+
+          ui='''<div class="modernFilters" id="modernFilters">
+          <div class="sectionTitle">Map layers</div>
+          <div class="mfGroup" data-kind="trap">
+            <div class="mfHead"><label class="mfLayer"><span>Traps</span><input class="mfSwitch" id="mfTrapsToggle" type="checkbox" checked></label><button type="button">Show types</button></div>
+            <div class="mfBody"><div class="mfSubTitle">Trap status</div><div id="mfStatus"></div><div class="mfSubTitle">Trap types</div><div id="mfTraps"></div></div>
+          </div>
+          <div class="mfGroup" data-kind="mon">
+            <div class="mfHead"><label class="mfLayer"><span>Monitoring Sites</span><input class="mfSwitch" id="mfMonToggle" type="checkbox" checked></label><button type="button">Show types</button></div>
+            <div class="mfBody"><div class="mfSubTitle">Monitoring types</div><div id="mfMons"></div></div>
+          </div>
+          <div class="mfGroup" data-kind="line">
+            <div class="mfHead"><label class="mfLayer"><span>Trap lines</span><input class="mfSwitch" id="mfLinesToggle" type="checkbox" checked></label><button type="button">Show types</button></div>
+            <div class="mfBody"><div class="mfSubTitle">Lines</div><div id="mfLines"></div></div>
+          </div>
+          <div class="mfGroup" data-kind="labels">
+            <div class="mfHead"><label class="mfLayer"><span>Labels</span><input class="mfSwitch" id="mfLabelsToggle" type="checkbox" checked></label><button type="button">Show types</button></div>
+            <div class="mfBody">
+              <label class="mfRow"><span>Trap numbers</span><input id="mfNumbers" type="checkbox" checked></label>
+              <label class="mfRow"><span>Line names</span><input id="mfLineNames" type="checkbox" checked></label>
+              <label class="mfRow"><span>Monitoring names</span><input id="mfMonNames" type="checkbox" checked></label>
+            </div>
+          </div>
+          <div class="mfGroup" data-kind="other">
+            <div class="mfHead"><label class="mfLayer"><span>Other layers</span><input class="mfSwitch" id="mfOtherToggle" type="checkbox" checked></label><button type="button">Show types</button></div>
+            <div class="mfBody">
+              <label class="mfRow"><span>Baitstations</span><input id="mfBait" type="checkbox"></label>
+              <label class="mfRow"><span>Points of interest</span><input id="mfPoi" type="checkbox"></label>
+              <label class="mfRow"><span>Only sensor enabled</span><input id="mfSensor" type="checkbox"></label>
+            </div>
+          </div>
+          </div>'''
+          a=s.find('<div class="modernFilters" id="modernFilters">')
+          if a<0: raise SystemExit('modernFilters block not found')
+          b=s.find('<div class="section" style="display:none"><select id="trapStatus"',a)
+          if b<0: raise SystemExit('hidden filter controls not found')
+          s=s[:a]+ui+'\n'+s[b:]
+
+          patch='''<script id="filter-interaction-patch">(function(){
+            var st=window.KPFilterState=window.KPFilterState||{trap:[],line:[],mon:[],status:['active'],ready:{trap:false,line:false,mon:false,status:false}};
+            function sel(k){return document.getElementById(k==='trap'?'trapType':k==='line'?'line':k==='mon'?'monType':'trapStatus')}
+            function body(k){return document.getElementById(k==='trap'?'mfTraps':k==='line'?'mfLines':k==='mon'?'mfMons':'mfStatus')}
+            function vals(k){var s=sel(k);return s?Array.prototype.slice.call(s.options).map(function(o){return o.value}).filter(Boolean):[]}
+            function sync(k){var a=vals(k),old=st[k]||[];if(!st.ready[k]){st[k]=k==='status'?(a.indexOf('active')>=0?['active']:a.slice()):a.slice();st.ready[k]=true;return}var keep=old.filter(function(v){return a.indexOf(v)>=0});st[k]=keep.length?keep:a.slice()}
+            function fire(k){var s=sel(k);if(!s)return;s.value=st[k].length===1?st[k][0]:'';s.dispatchEvent(new Event('change',{bubbles:true}));s.dispatchEvent(new Event('input',{bubbles:true}))}
+            function build(k){var b=body(k);if(!b)return;if(k==='status'){var opts=[['active','Active'],['retired','Retired'],['disabled','Disabled']];b.innerHTML='';if(!st.ready.status){st.status=['active'];st.ready.status=true}opts.forEach(function(o){var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o[1];var cb=document.createElement('input');cb.type='checkbox';cb.checked=st.status.indexOf(o[0])>=0;cb.addEventListener('change',function(){if(cb.checked){if(st.status.indexOf(o[0])<0)st.status.push(o[0])}else st.status=st.status.filter(function(v){return v!==o[0]});if(!st.status.length)st.status=['active'];render()});row.appendChild(span);row.appendChild(cb);b.appendChild(row)});return}var s=sel(k);if(!s)return;sync(k);var opts=Array.prototype.slice.call(s.options).filter(function(o){return o.value});if(k==='mon'){var seen={};opts=[['Wax tags','Wax tags'],['Camera','Camera']].map(function(x){return {value:x[0],text:x[1]}}).concat(opts.map(function(o){return {value:o.value,text:o.text}})).filter(function(o){var q=o.value.toLowerCase();if(seen[q])return false;seen[q]=1;return true})}b.innerHTML='';opts.forEach(function(o){var row=document.createElement('label');row.className='mfRow';var span=document.createElement('span');span.textContent=o.text;var cb=document.createElement('input');cb.type='checkbox';cb.checked=st[k].indexOf(o.value)>=0;cb.dataset.filterValue=o.value;cb.addEventListener('change',function(){if(cb.checked){if(st[k].indexOf(o.value)<0)st[k].push(o.value)}else st[k]=st[k].filter(function(v){return v!==o.value});fire(k);render()});row.appendChild(span);row.appendChild(cb);b.appendChild(row)})}
+            window.mfBuild=function(){build('trap');build('line');build('mon');build('status')};
+            document.addEventListener('click',function(e){var b=e.target.closest('.mfHead button');if(!b)return;var g=b.closest('.mfGroup');if(!g)return;e.preventDefault();g.classList.toggle('open');b.textContent=g.classList.contains('open')?'Hide types':'Show types'});
+            document.addEventListener('DOMContentLoaded',function(){window.mfBuild()});setTimeout(function(){window.mfBuild()},300);setTimeout(function(){window.mfBuild()},1200);
+          })();</script>'''
+          s=re.sub(r'<script id="filter-interaction-patch">.*?</script>\s*',patch+'\n',s,count=1,flags=re.S)
+
+          binding='''<script id="layer-filter-binding">(function(){
+            function setLegacy(id,checked){var el=document.getElementById(id);if(!el)return;if(el.checked!==checked)el.checked=checked;el.dispatchEvent(new Event("input",{bubbles:true}))}
+            function bind(id,legacy){var a=document.getElementById(id);if(!a||a.dataset.bound)return;a.dataset.bound="1";var b=document.getElementById(legacy);if(b)a.checked=b.checked;a.addEventListener("change",function(e){e.stopPropagation();setLegacy(legacy,a.checked)})}
+            function init(){bind("mfTrapsToggle","showTraps");bind("mfMonToggle","showMon");bind("mfLinesToggle","showLines");bind("mfNumbers","showNumbers");bind("mfLineNames","showLineNames");bind("mfMonNames","showMonNames");var lt=document.getElementById("mfLabelsToggle");if(lt&&!lt.dataset.bound){lt.dataset.bound="1";lt.addEventListener("change",function(e){e.stopPropagation();["mfNumbers","mfLineNames","mfMonNames"].forEach(function(id){var x=document.getElementById(id);if(x){x.checked=lt.checked;x.dispatchEvent(new Event("change",{bubbles:true}))}})})}}
+            if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();setTimeout(init,500);setTimeout(init,1500)
+          })();</script>'''
+          s=re.sub(r'<script id="layer-filter-binding">.*?</script>\s*','',s,count=1,flags=re.S)
+          s=s.replace('</body>',binding+'\n</body>',1)
+
+          # Make Wax tags / Camera filters match common Trap.NZ monitoring fields.
+          old="function pass(t,f,mon){var k=mon?'monType':'trapType',vals=f[k]||[];if(vals.length&&vals.indexOf(t.type)<0)return false;if(!mon&&f.status&&f.status.length&&f.status.indexOf(trapStatus(t))<0)return false;if(f.line&&f.line.length&&f.line.indexOf(t.line)<0)return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(' ').toLowerCase().indexOf(f.search)>=0}"
+          new="function pass(t,f,mon){var k=mon?'monType':'trapType',vals=f[k]||[];if(vals.length){var mt=String(t.type||'').toLowerCase(),mn=String(t.name||'').toLowerCase(),match=vals.some(function(v){var q=String(v).toLowerCase();if(mon&&q==='wax tags')return mt.indexOf('wax')>=0||mn.indexOf('wax')>=0||String(t.tags||'').toLowerCase().indexOf('wax')>=0;if(mon&&q==='camera')return mt.indexOf('camera')>=0||mn.indexOf('camera')>=0||String(t.tags||'').toLowerCase().indexOf('camera')>=0;return q===mt});if(!match)return false}if(!mon&&f.status&&f.status.length&&f.status.indexOf(trapStatus(t))<0)return false;if(f.line&&f.line.length&&f.line.indexOf(t.line)<0)return false;return !f.search||[t.id,t.title,t.name,t.code,t.number,t.line,t.type].join(' ').toLowerCase().indexOf(f.search)>=0}"
+          if old in s:s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
           PY
       - name: Validate
         run: |
           python3 - <<'PY'
           from pathlib import Path
           from bs4 import BeautifulSoup
-          s=BeautifulSoup(Path('index.html').read_text(),'html.parser')
-          for i,sc in enumerate(s.find_all('script')):
-              if sc.string: Path(f'/tmp/s{i}.js').write_text(sc.string)
+          s=BeautifulSoup(Path('index.html').read_text(), 'html.parser')
+          print('modernFilters', bool(s.find(id='modernFilters')))
+          print('filter patch', bool(s.find(id='filter-interaction-patch')))
+          print('layer binding', bool(s.find(id='layer-filter-binding')))
           PY
-          for f in /tmp/s*.js; do node --check "$f"; done
-      - name: Commit patch and remove workflow
+      - name: Commit and remove one-shot workflow
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
           git rm .github/workflows/apply-trapnz-style-filters.yml
-          git commit -m 'Fix Trap.NZ style filters'
+          git commit -m 'fix: TrapNZ style map filters [skip ci]'
           git push
