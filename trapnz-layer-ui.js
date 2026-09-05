@@ -1,10 +1,40 @@
 (function(){
 'use strict';
-/* Kaitiaki Pest display clustering.
-   The existing Trap.NZ UI remains in trapnz-layer-ui-core.js.
-   At overview scale, dense points become clear count bubbles; zooming in
-   returns the normal individual points and labels. */
+/* Kaitiaki Pest — LINZ Topo50 + display clustering. */
+
+/*
+   The main index.html already owns the Leaflet map and base-map selector.
+   Patch Leaflet's tileLayer call so the Topographic choice uses the real
+   LINZ Topo50 raster tiles (layer 50767), which Leaflet can display directly.
+   The newer LINZ "topographic" service is vector/PBF + StyleJSON, not a PNG
+   raster, so pointing Leaflet at it as .webp does not work correctly.
+*/
+function installLinzTopoPatch(){
+  if(!window.L||window.__kpLinzTopoPatch)return;
+  window.__kpLinzTopoPatch=true;
+  var nativeTileLayer=window.L.tileLayer;
+  window.L.tileLayer=function(url,options){
+    try{
+      if(typeof url==='string' && url.indexOf('/topographic/')>=0){
+        var match=url.match(/[?&]api=([^&]+)/i);
+        var key=match?decodeURIComponent(match[1]):(localStorage.getItem('kp_linz_key')||'');
+        if(key){
+          var topoUrl='https://tiles-{s}.data-cdn.linz.govt.nz/services;key='+encodeURIComponent(key)+'/tiles/v4/layer=50767/EPSG:3857/{z}/{x}/{y}.png';
+          var o=Object.assign({},options||{});
+          o.subdomains=['a','b','c','d'];
+          o.maxZoom=17;
+          o.maxNativeZoom=17;
+          o.attribution='© LINZ CC BY 4.0';
+          return nativeTileLayer(topoUrl,o);
+        }
+      }
+    }catch(e){console.warn('LINZ Topo50 patch:',e);}
+    return nativeTileLayer(url,options);
+  };
+}
+
 function loadCore(){
+  installLinzTopoPatch();
   /* Keep the LINZ Topo50 raster from index.html. The core's MapLibre
      topographic layer is intentionally bypassed because the Trap.NZ-style
      raster is clearer and closer to the field map the team already uses. */
