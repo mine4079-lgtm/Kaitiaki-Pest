@@ -1,7 +1,8 @@
 (function(){
 'use strict';
 /* Kaitiaki Pest — LINZ vector Topographic basemap upgrade.
-   Keeps the terrain useful at working zoom: stronger contours, deep zoom, less hillshade blur. */
+   Uses the working LINZ raster topo as a guaranteed fallback while the vector
+   topographic layer loads. If MapLibre/LINZ vector tiles fail, the map stays usable. */
 function loadCss(href){
   if(document.querySelector('link[data-kp-href="'+href+'"]'))return;
   var l=document.createElement('link');l.rel='stylesheet';l.href=href;l.dataset.kpHref=href;document.head.appendChild(l);
@@ -29,11 +30,13 @@ function captureMap(){
 }
 function getMap(){return window.__kpMap||captureMap();}
 function isTopo(){var r=document.querySelector('input[name="base"]:checked');return !!(r&&r.value==='topo');}
-function removeOldTopo(m){
+function findRasterTopo(m){
+  var found=null;
   Object.keys(m._layers||{}).forEach(function(id){
     var lyr=m._layers[id],u=lyr&&lyr._url||'';
-    if(u.indexOf('/topographic/')>=0||u.indexOf('/topo-raster/')>=0){try{m.removeLayer(lyr);}catch(e){}}
+    if(u.indexOf('/topographic/')>=0||u.indexOf('/topo-raster/')>=0)found=lyr;
   });
+  return found;
 }
 function enhanceContours(gl){
   if(!gl||!gl.getStyle)return;
@@ -42,15 +45,12 @@ function enhanceContours(gl){
       var sourceLayer=String(layer['source-layer']||'').toLowerCase();
       if(layer.type==='line'&&sourceLayer==='contours'){
         try{
-          /* Keep contour style alive beyond the source's native zoom 15.
-             The vector geometry scales cleanly rather than disappearing. */
           gl.setLayerZoomRange(layer.id,8,23);
           gl.setPaintProperty(layer.id,'line-color','#8b5a2b');
           gl.setPaintProperty(layer.id,'line-opacity',0.92);
           gl.setPaintProperty(layer.id,'line-width',['interpolate',['linear'],['zoom'],8,0.55,10,0.8,12,1.15,14,1.65,16,2.1,18,2.5,20,2.8,23,3.1]);
         }catch(e){}
       }
-      /* Keep hillshade subtle at deep zoom so terrain lines are not muddy. */
       if(layer.type==='raster'&&/(hillshade|relief|shade)/i.test(layer.id+' '+(layer.source||''))){
         try{gl.setPaintProperty(layer.id,'raster-opacity',['interpolate',['linear'],['zoom'],8,0.55,12,0.4,15,0.25,18,0.16,23,0.12]);}catch(e){}
       }
@@ -65,18 +65,34 @@ function addTopo(){
   loadCss('https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css');
   function finish(){
     if(!window.L.maplibreGL||!isTopo())return;
-    removeOldTopo(m);
+    /* Keep the working LINZ raster underneath until vector tiles are proven OK. */
+    var fallback=findRasterTopo(m);
     if(window.__kpTopoGL){try{m.removeLayer(window.__kpTopoGL);}catch(e){}window.__kpTopoGL=null;}
     var style='https://basemaps.linz.govt.nz/v1/styles/topographic-v2.json?api='+encodeURIComponent(key);
     var glLayer=L.maplibreGL({style:style,attribution:'© Toitū Te Whenua LINZ CC BY 4.0'});
     window.__kpTopoGL=glLayer;glLayer.addTo(m);
     var gl=glLayer.getMaplibreMap?glLayer.getMaplibreMap():glLayer._glMap;
+    var failed=false;
+    function fallbackToRaster(){
+      if(failed)return;failed=true;
+      try{m.removeLayer(glLayer);}catch(e){}
+      window.__kpTopoGL=null;
+      if(fallback&&!m.hasLayer(fallback))fallback.addTo(m);
+      if(status)status.textContent='LINZ vector topo unavailable — using reliable Topo50 raster.';
+    }
     if(gl){
       try{gl.setMaxZoom(22);gl.setMinZoom(5);}catch(e){}
-      gl.on('load',function(){enhanceContours(gl);if(status)status.textContent='LINZ Topographic loaded • clear contours to zoom 22.';});
+      gl.on('load',function(){
+        if(failed)return;
+        enhanceContours(gl);
+        if(fallback&&m.hasLayer(fallback))m.removeLayer(fallback);
+        if(status)status.textContent='LINZ Topographic loaded • clear contours to zoom 22.';
+      });
+      gl.on('error',function(e){console.warn('LINZ vector topo error:',e);fallbackToRaster();});
       gl.on('styledata',function(){setTimeout(function(){enhanceContours(gl);},40);});
-    }
+    }else fallbackToRaster();
     if(status)status.textContent='Loading LINZ Topographic vector map…';
+    setTimeout(function(){if(window.__kpTopoGL===glLayer&&fallback&&gl&&gl.isStyleLoaded&&!gl.isStyleLoaded())fallbackToRaster();},9000);
   }
   if(window.maplibregl&&window.L.maplibreGL)finish();
   else loadScript('https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js',function(){
