@@ -15,14 +15,19 @@ function loadScript(src,done){
   document.head.appendChild(s);
 }
 function captureMap(){
-  if(!window.L||window.__kpMapCaptureInstalled)return;
+  if(!window.L)return null;
+  if(window.__kpMap)return window.__kpMap;
+  if(L.Map&&Array.isArray(L.Map._maps)&&L.Map._maps.length){window.__kpMap=L.Map._maps[0];return window.__kpMap;}
+  if(L.Map&&Array.isArray(L.Map._instances)&&L.Map._instances.length){window.__kpMap=L.Map._instances[0];return window.__kpMap;}
+  if(window.__kpMapCaptureInstalled)return null;
   window.__kpMapCaptureInstalled=true;
   var sv=L.Map.prototype.setView,fl=L.Map.prototype.flyTo,rl=L.Map.prototype.removeLayer;
   L.Map.prototype.setView=function(){window.__kpMap=this;return sv.apply(this,arguments);};
   L.Map.prototype.flyTo=function(){window.__kpMap=this;return fl.apply(this,arguments);};
   L.Map.prototype.removeLayer=function(layer){window.__kpMap=this;return rl.call(this,layer);};
+  return window.__kpMap||null;
 }
-function getMap(){return window.__kpMap||null;}
+function getMap(){return window.__kpMap||captureMap();}
 function isTopo(){var r=document.querySelector('input[name="base"]:checked');return !!(r&&r.value==='topo');}
 function removeOldTopo(m){
   Object.keys(m._layers||{}).forEach(function(id){
@@ -82,7 +87,7 @@ function boot(){
   if(window.__kpTopoCoreBooted)return;window.__kpTopoCoreBooted=true;
   radios.forEach(function(r){r.addEventListener('change',function(){if(r.checked&&r.value==='topo')addTopo();else if(r.checked)removeTopo();});});
   var save=document.getElementById('saveKey');if(save)save.addEventListener('click',function(){if(isTopo())setTimeout(addTopo,60);});
-  setTimeout(function(){if(isTopo())addTopo();},300);
+  setTimeout(function(){if(isTopo())addTopo();},400);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
