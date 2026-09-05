@@ -2,7 +2,7 @@
   'use strict';
   // LINZ Topographic trigger/fallback helper.
   // The live map uses trapnz-layer-ui.js for the Topographic renderer.
-  // This file is retained only to trigger the one-time repository fix workflow.
+  // Trigger the final repository repair so the real MapLibre LINZ renderer is used.
   function getKey(){ return localStorage.getItem('kp_linz_key') || ''; }
   function fixTopo(){
     if(!window.kpLeafletMap) return;
