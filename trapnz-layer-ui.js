@@ -133,3 +133,25 @@ function installContourEnhancer(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadCore);else loadCore();
 })();
+
+/* Deep zoom fix: keep Leaflet zooming past the LINZ Topographic vector tile
+   source zoom (15). MapLibre vector tiles can be overzoomed cleanly, so the
+   contour geometry remains sharp instead of the map stopping at z15. */
+(function(){
+  'use strict';
+  function apply(){
+    var m=window.__kpMap;
+    if(!m||!window.L)return;
+    try{
+      m.options.maxZoom=22;
+      m._layersMaxZoom=22;
+      if(m._zoom!==undefined && m.getZoom()>=15) m.invalidateSize({pan:false});
+    }catch(e){}
+  }
+  var n=0;
+  var timer=setInterval(function(){
+    apply();
+    if(++n>40)clearInterval(timer);
+  },250);
+  document.addEventListener('visibilitychange',apply);
+})();
