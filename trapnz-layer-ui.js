@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-/* Kaitiaki Pest — Trap.NZ-style filter polish + robust monitoring type normalisation. */
+/* Kaitiaki Pest — Trap.NZ-style filter polish, GPS and map visual polish. */
 function text(v){return v===null||v===undefined?'':String(v).trim();}
 function monitoringTypeFromFeature(feature){
   var p=(feature&&feature.properties)||{};
@@ -16,8 +16,8 @@ function monitoringTypeFromFeature(feature){
   return vals[0]||null;
 }
 var nativeFetch=window.fetch;
-if(nativeFetch&&!window.__kpMonitoringFetchFixV2){
-  window.__kpMonitoringFetchFixV2=true;
+if(nativeFetch&&!window.__kpMonitoringFetchFixV3){
+  window.__kpMonitoringFetchFixV3=true;
   window.fetch=function(input,init){return nativeFetch.call(this,input,init).then(function(response){
     try{
       var url=typeof input==='string'?input:(input&&input.url)||'';
@@ -29,14 +29,64 @@ if(nativeFetch&&!window.__kpMonitoringFetchFixV2){
     }catch(e){return response;}
   });};
 }
+function addMapPolish(){
+  if(document.getElementById('kp-map-polish-css'))return;
+  var css=document.createElement('style');css.id='kp-map-polish-css';css.textContent=''
+  +'.top{top:10px!important;left:10px!important;right:10px!important;align-items:center} '
+  +'.pill{border-radius:18px!important;padding:10px 15px!important;font-size:15px!important;line-height:1.15!important;box-shadow:0 4px 18px rgba(0,0,0,.20)!important;backdrop-filter:blur(5px)} '
+  +'.actions{gap:8px!important} '
+  +'.top .btn,.right .btn{width:52px!important;height:52px!important;min-width:52px!important;border-radius:15px!important;background:rgba(255,255,255,.96)!important;box-shadow:0 4px 16px rgba(0,0,0,.20)!important;font-weight:500!important} '
+  +'.top .btn:first-child{font-size:0!important} '
+  +'.top .btn:first-child:after{content:"☰";font-size:25px} '
+  +'.top .btn:last-child{font-size:25px!important} '
+  +'.right{top:76px!important;right:10px!important;gap:8px!important} '
+  +'.right .btn{font-size:28px!important} '
+  +'.right .btn:last-child{font-size:31px!important} '
+  +'.gps{width:62px!important;height:62px!important;bottom:83px!important;border:1px solid rgba(0,0,0,.08)!important;box-shadow:0 4px 18px rgba(0,0,0,.22)!important;font-size:29px!important} '
+  +'.gps.kp-gps-active{background:#0d594b!important;color:#fff!important} '
+  +'.status{bottom:84px!important;border-radius:13px!important;padding:8px 12px!important;background:rgba(255,255,255,.94)!important;box-shadow:0 3px 14px rgba(0,0,0,.16)!important} '
+  +'.bottom{height:76px!important;box-shadow:0 -4px 18px rgba(0,0,0,.16)!important} '
+  +'.bottom button{font-size:12px!important;line-height:1.25!important} '
+  +'.bottom .active{background:#0d594b!important} '
+  +'.leaflet-control-zoom{border:0!important;box-shadow:none!important;margin-right:10px!important;margin-top:76px!important} '
+  +'.leaflet-control-zoom a{width:52px!important;height:52px!important;line-height:50px!important;border:0!important;margin-bottom:8px!important;border-radius:15px!important;background:rgba(255,255,255,.96)!important;box-shadow:0 4px 16px rgba(0,0,0,.20)!important;color:#111!important;font-size:28px!important} '
+  +'.leaflet-control-attribution{font-size:9px!important;background:rgba(255,255,255,.72)!important;border-radius:8px 0 0 0!important;padding:2px 5px!important} '
+  +'.label{font-size:11px!important;font-weight:800!important;color:#17202a!important;text-shadow:0 1px 3px #fff,0 -1px 3px #fff,1px 0 3px #fff,-1px 0 3px #fff!important} '
+  +'.leaflet-popup-content-wrapper{border-radius:14px!important;box-shadow:0 6px 24px rgba(0,0,0,.22)!important} '
+  +'.leaflet-popup-content{margin:13px!important} '
+  +'.popup h3{margin:0 0 10px!important;font-size:18px!important} '
+  +'.kp-brand{position:absolute;left:12px;top:76px;z-index:900;background:rgba(255,255,255,.90);border-radius:13px;padding:6px 10px;font-weight:800;font-size:12px;box-shadow:0 3px 12px rgba(0,0,0,.14);pointer-events:none} '
+  +'@media(max-width:600px){.kp-brand{top:72px}.pill{max-width:calc(100vw - 135px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.right{top:136px!important}.leaflet-control-zoom{display:none}}';
+  document.head.appendChild(css);
+}
 function boot(){
   var drawer=document.getElementById('drawer');
   if(!drawer){setTimeout(boot,250);return;}
-  if(!document.getElementById('kp-filter-polish-css')){var css=document.createElement('style');css.id='kp-filter-polish-css';css.textContent=''+'.drawer .layer{border-top:1px solid #ccc;padding:0 0 2px}'+'.drawer .layerhead{min-height:58px}'+'.drawer .layerhead .types,.drawer .group .types{font-weight:500;white-space:nowrap}'+'.drawer .layerbody{background:#eee}'+'.drawer .group .head{background:#eee}'+'.drawer .group .body{background:#eee}'+'.drawer .row.all{background:#eee;font-weight:650}'+'.drawer .row.child{background:#fff}'+'.drawer .row input{accent-color:#111}'+'.drawer .group.open>.body,.drawer .layer.open>.layerbody{display:block}'+'.drawer .types:focus,.drawer .switch:focus,.drawer .row input:focus{outline:2px solid #0d594b;outline-offset:2px}';document.head.appendChild(css);}
+  addMapPolish();
+  if(!document.getElementById('kp-filter-polish-css')){
+    var css=document.createElement('style');css.id='kp-filter-polish-css';css.textContent=''
+    +'.drawer .layer{border-top:1px solid #ccc;padding:0 0 2px}'
+    +'.drawer .layerhead{min-height:58px}'
+    +'.drawer .layerhead .types,.drawer .group .types{font-weight:500;white-space:nowrap}'
+    +'.drawer .layerbody{background:#eee}'
+    +'.drawer .group .head{background:#eee}'
+    +'.drawer .group .body{background:#eee}'
+    +'.drawer .row.all{background:#eee;font-weight:650}'
+    +'.drawer .row.child{background:#fff}'
+    +'.drawer .row input{accent-color:#111}'
+    +'.drawer .group.open>.body,.drawer .layer.open>.layerbody{display:block}'
+    +'.drawer .types:focus,.drawer .switch:focus,.drawer .row input:focus{outline:2px solid #0d594b;outline-offset:2px}';
+    document.head.appendChild(css);
+  }
   function toggleBody(button,body,owner){if(!body)return;var open=body.style.display==='block';body.style.display=open?'none':'block';if(owner)owner.classList.toggle('open',!open);button.textContent=open?'Show types':'Hide types';}
   if(!drawer.dataset.kpTypesBound){drawer.dataset.kpTypesBound='1';drawer.addEventListener('click',function(e){var b=e.target.closest('.layerhead .types');if(b&&drawer.contains(b)){e.preventDefault();e.stopPropagation();var layer=b.closest('.layer');toggleBody(b,layer&&layer.querySelector('.layerbody'),layer);return;}var sb=e.target.closest('.group .head .types');if(sb&&drawer.contains(sb)){e.preventDefault();e.stopPropagation();var group=sb.closest('.group');toggleBody(sb,group&&group.querySelector('.body'),group);}},true);}
   var statusHead=drawer.querySelector('.group[data-kind="status"] .head span');if(statusHead)statusHead.textContent='Trap status';
   var monHead=drawer.querySelector('.group[data-kind="mon"] .head span');if(monHead)monHead.textContent='Monitoring types';
+  addBrand();
+}
+function addBrand(){
+  if(document.getElementById('kp-brand'))return;
+  var b=document.createElement('div');b.id='kp-brand';b.className='kp-brand';b.textContent='Korehāhā Whakahau';document.body.appendChild(b);
 }
 function installGPS(){
   if(window.__kpGpsInstalled||!window.L)return;
@@ -54,6 +104,7 @@ function installGPS(){
     var lat=pos.coords.latitude,lon=pos.coords.longitude,acc=pos.coords.accuracy||0;
     var m=getMap();
     if(!m){setTimeout(function(){showPosition(pos)},100);return;}
+    btn.classList.add('kp-gps-active');
     if(!userMarker){
       userMarker=L.circleMarker([lat,lon],{radius:9,color:'#fff',weight:3,fillColor:'#1976d2',fillOpacity:1,zIndexOffset:10000}).addTo(m);
       userMarker.bindTooltip('Your location',{permanent:false,direction:'top'});
