@@ -38,5 +38,35 @@ function boot(){
   var statusHead=drawer.querySelector('.group[data-kind="status"] .head span');if(statusHead)statusHead.textContent='Trap status';
   var monHead=drawer.querySelector('.group[data-kind="mon"] .head span');if(monHead)monHead.textContent='Monitoring types';
 }
+function installGPS(){
+  if(window.__kpGpsInstalled||!window.L)return;
+  var btn=document.getElementById('gps');
+  if(!btn)return;
+  window.__kpGpsInstalled=true;
+  var userMarker=null,accuracyCircle=null,watchId=null;
+  function showPosition(pos){
+    var lat=pos.coords.latitude,lon=pos.coords.longitude,acc=pos.coords.accuracy||0;
+    if(!window.map)return;
+    if(!userMarker){
+      userMarker=L.circleMarker([lat,lon],{radius:8,color:'#fff',weight:3,fillColor:'#1976d2',fillOpacity:1,zIndexOffset:10000}).addTo(window.map);
+      userMarker.bindTooltip('Your location',{permanent:false,direction:'top'});
+    }else userMarker.setLatLng([lat,lon]);
+    if(!accuracyCircle)accuracyCircle=L.circle([lat,lon],{radius:acc,color:'#1976d2',weight:1,fillColor:'#1976d2',fillOpacity:.12,interactive:false}).addTo(window.map);
+    else accuracyCircle.setLatLng([lat,lon]).setRadius(acc);
+    window.map.flyTo([lat,lon],Math.max(16,window.map.getZoom()),{animate:false});
+    var status=document.getElementById('status');
+    if(status)status.textContent='GPS location found • accuracy '+Math.round(acc)+' m';
+  }
+  function fail(err){
+    var status=document.getElementById('status');
+    if(status)status.textContent=err&&err.code===1?'Location permission denied — allow location for this site.':'Unable to get GPS location.';
+  }
+  btn.addEventListener('click',function(){
+    if(!navigator.geolocation){fail({code:2});return;}
+    navigator.geolocation.getCurrentPosition(showPosition,fail,{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+    if(watchId===null)watchId=navigator.geolocation.watchPosition(showPosition,fail,{enableHighAccuracy:true,maximumAge:5000,timeout:20000});
+  });
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+var gpsTimer=setInterval(function(){if(document.getElementById('gps')&&window.L){clearInterval(gpsTimer);installGPS();}},250);
 })();
