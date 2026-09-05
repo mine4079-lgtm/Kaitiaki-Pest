@@ -1,0 +1,32 @@
+name: Fix LINZ Topographic Map
+on: push
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update LINZ Topographic tiles
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          old="https://tiles-{s}.data-cdn.linz.govt.nz/services;key='+encodeURIComponent(k)+'/tiles/v4/layer=50767/EPSG:3857/{z}/{x}/{y}.png"
+          new="https://basemaps.linz.govt.nz/v1/tiles/topographic/WebMercatorQuad/{z}/{x}/{y}.webp?api='+encodeURIComponent(k)"
+          if old in s:
+              s=s.replace(old,new)
+              s=s.replace("subdomains:'abcd',maxZoom:20,attribution:'© Toitū Te Whenua LINZ CC BY 4.0'","maxZoom:15,attribution:'© Toitū Te Whenua LINZ CC BY 4.0'")
+              p.write_text(s)
+              print('LINZ topographic basemap updated.')
+          else:
+              print('LINZ topographic basemap already current.')
+          PY
+      - name: Commit if changed
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Use current LINZ topographic basemap'
+          git push
