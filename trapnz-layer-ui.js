@@ -1,10 +1,6 @@
 (function(){
 'use strict';
 /* Kaitiaki Pest — LINZ Topo50 + display clustering. */
-
-/* The main index.html owns the Leaflet map and base-map selector.
-   Use LINZ's current Topo50 raster tiles so the map matches the
-   LINZ Basemaps Topo50 view rather than the older CDN layer. */
 function installLinzTopoPatch(){
   if(!window.L||window.__kpLinzTopoPatch)return;
   window.__kpLinzTopoPatch=true;
@@ -27,12 +23,11 @@ function installLinzTopoPatch(){
     return nativeTileLayer(url,options);
   };
 }
-
 function loadCore(){
   installLinzTopoPatch();
   var s=document.createElement('script');
   s.src='trapnz-layer-ui-core.js';
-  s.onload=installClusters;
+  s.onload=function(){installClusters();installContourEnhancer();};
   s.onerror=function(){console.error('Kaitiaki Pest: core UI failed to load');};
   document.head.appendChild(s);
 }
@@ -102,6 +97,40 @@ function installClusters(){
   var style=document.createElement('style');
   style.textContent='.kp-cluster-bubble{position:absolute;transform:translateZ(0);border:4px solid rgba(255,255,255,.95);border-radius:50%;color:#fff;font:800 16px/1 system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.28);padding:0;text-align:center;pointer-events:auto;touch-action:manipulation;cursor:pointer}.kp-cluster-bubble:active{transform:scale(.96)}';
   document.head.appendChild(style);
+}
+function installContourEnhancer(){
+  if(window.__kpContourEnhancerInstalled||!window.L)return;
+  window.__kpContourEnhancerInstalled=true;
+  function styleContours(){
+    var gl=window.__kpTopoGL&&window.__kpTopoGL._glMap;
+    if(!gl||!gl.getStyle)return;
+    try{
+      (gl.getStyle().layers||[]).forEach(function(layer){
+        if(layer['source-layer']!=='contours'||layer.type!=='line')return;
+        var id=layer.id, type=String(layer.type||'').toLowerCase();
+        var index=String(layer['type']||'');
+        try{
+          gl.setPaintProperty(id,'line-color','#8b5a2b');
+          gl.setPaintProperty(id,'line-opacity',0.82);
+          gl.setPaintProperty(id,'line-width',['interpolate',['linear'],['zoom'],9,0.8,11,1.1,13,1.45,15,1.9]);
+        }catch(e){}
+      });
+      var st=document.getElementById('mapStatus');
+      if(st&&document.querySelector('input[name="base"]:checked')?.value==='topo')st.textContent='LINZ Topographic map loaded • contour lines enhanced.';
+    }catch(e){console.warn('Contour styling:',e);}
+  }
+  function hook(){
+    var gl=window.__kpTopoGL&&window.__kpTopoGL._glMap;
+    if(!gl){setTimeout(hook,400);return;}
+    gl.on('load',styleContours);
+    gl.on('styledata',function(){setTimeout(styleContours,50);});
+    setTimeout(styleContours,500);
+  }
+  function watch(){
+    if(window.__kpTopoGL){hook();return;}
+    setTimeout(watch,500);
+  }
+  watch();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadCore);else loadCore();
 })();
