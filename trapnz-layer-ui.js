@@ -123,6 +123,13 @@ function installTopoBasemap(){
   if(window.__kpTopoInstalled||!window.L)return;
   var radios=document.querySelectorAll('input[name="base"]');if(!radios.length)return;
   window.__kpTopoInstalled=true;
+  // Capture the existing Leaflet map when the base layer is switched.
+  // index.html creates the map before this helper script is loaded.
+  if(!window.__kpTopoMapCapture){
+    window.__kpTopoMapCapture=true;
+    var kpOriginalRemoveLayer=L.Map.prototype.removeLayer;
+    L.Map.prototype.removeLayer=function(layer){window.__kpMap=this;return kpOriginalRemoveLayer.call(this,layer);};
+  }
   loadCss('https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css');
   function ensure(callback){
     if(window.maplibregl&&window.L.maplibreGL){callback();return;}
