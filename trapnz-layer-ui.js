@@ -64,7 +64,6 @@ function installProjectViewFix(){
   window.__kpProjectViewFix=true;
   var originalFit=L.Map.prototype.fitBounds;
   var originalSet=L.Map.prototype.setView;
-  var first=true;
   function saneBounds(){return L.latLngBounds([[-38.12,176.90],[-37.86,177.25]]);}
   L.Map.prototype.setView=function(center,zoom,options){
     if(center&&Array.isArray(center)&&zoom!==undefined&&zoom<5){
@@ -79,50 +78,10 @@ function installProjectViewFix(){
       var sw=bounds.getSouthWest(),ne=bounds.getNorthEast();
       var spanLat=Math.abs(ne.lat-sw.lat),spanLon=Math.abs(ne.lng-sw.lng);
       var looksGlobal=spanLat>2||spanLon>2||sw.lat<-40||ne.lat>-35||sw.lng<175||ne.lng>179;
-      if(looksGlobal){
-        bounds=saneBounds();
-        options=Object.assign({},options||{},{padding:[35,90],maxZoom:13,animate:false});
-      }
+      if(looksGlobal){bounds=saneBounds();options=Object.assign({},options||{},{padding:[35,90],maxZoom:13,animate:false});}
     }
     return originalFit.call(this,bounds,options);
   };
-}
-function forceProjectView(){
-  if(!window.L)return;
-  var el=document.getElementById('map');
-  if(!el)return;
-  var id=el._leaflet_id;
-  if(!id)return;
-  var m=el._leaflet_map||null;
-  if(!m&&window.__kpMap)m=window.__kpMap;
-  if(!m)return;
-  if(m.getZoom()<8){m.setView([-37.99,177.04],12,{animate:false});}
-}
-function boot(){
-  var drawer=document.getElementById('drawer');
-  if(!drawer){setTimeout(boot,250);return;}
-  addMapPolish();
-  installProjectViewFix();
-  if(!document.getElementById('kp-filter-polish-css')){
-    var css=document.createElement('style');css.id='kp-filter-polish-css';css.textContent=''
-    +'.drawer .layer{border-top:1px solid #ccc;padding:0 0 2px}'
-    +'.drawer .layerhead{min-height:58px}'
-    +'.drawer .layerhead .types,.drawer .group .types{font-weight:500;white-space:nowrap}'
-    +'.drawer .layerbody{background:#eee}'
-    +'.drawer .group .head{background:#eee}'
-    +'.drawer .group .body{background:#eee}'
-    +'.drawer .row.all{background:#eee;font-weight:650}'
-    +'.drawer .row.child{background:#fff}'
-    +'.drawer .row input{accent-color:#111}'
-    +'.drawer .group.open>.body,.drawer .layer.open>.layerbody{display:block}'
-    +'.drawer .types:focus,.drawer .switch:focus,.drawer .row input:focus{outline:2px solid #0d594b;outline-offset:2px}';
-    document.head.appendChild(css);
-  }
-  function toggleBody(button,body,owner){if(!body)return;var open=body.style.display==='block';body.style.display=open?'none':'block';if(owner)owner.classList.toggle('open',!open);button.textContent=open?'Show types':'Hide types';}
-  if(!drawer.dataset.kpTypesBound){drawer.dataset.kpTypesBound='1';drawer.addEventListener('click',function(e){var b=e.target.closest('.layerhead .types');if(b&&drawer.contains(b)){e.preventDefault();e.stopPropagation();var layer=b.closest('.layer');toggleBody(b,layer&&layer.querySelector('.layerbody'),layer);return;}var sb=e.target.closest('.group .head .types');if(sb&&drawer.contains(sb)){e.preventDefault();e.stopPropagation();var group=sb.closest('.group');toggleBody(sb,group&&group.querySelector('.body'),group);}},true);}
-  var statusHead=drawer.querySelector('.group[data-kind="status"] .head span');if(statusHead)statusHead.textContent='Trap status';
-  var monHead=drawer.querySelector('.group[data-kind="mon"] .head span');if(monHead)monHead.textContent='Monitoring types';
-  addBrand();
 }
 function addBrand(){
   if(document.getElementById('kp-brand'))return;
@@ -130,52 +89,81 @@ function addBrand(){
 }
 function installGPS(){
   if(window.__kpGpsInstalled||!window.L)return;
-  var btn=document.getElementById('gps');
-  if(!btn)return;
+  var btn=document.getElementById('gps');if(!btn)return;
   window.__kpGpsInstalled=true;
   var userMarker=null,accuracyCircle=null,watchId=null;
   var originalFlyTo=L.Map.prototype.flyTo;
-  if(!window.__kpMapCaptureInstalled){
-    window.__kpMapCaptureInstalled=true;
-    L.Map.prototype.flyTo=function(){window.__kpMap=this;return originalFlyTo.apply(this,arguments);};
-  }
+  if(!window.__kpMapCaptureInstalled){window.__kpMapCaptureInstalled=true;L.Map.prototype.flyTo=function(){window.__kpMap=this;return originalFlyTo.apply(this,arguments);};}
   var originalSetView=L.Map.prototype.setView;
-  if(!window.__kpMapCaptureSetView){
-    window.__kpMapCaptureSetView=true;
-    L.Map.prototype.setView=function(){window.__kpMap=this;return originalSetView.apply(this,arguments);};
-  }
+  if(!window.__kpMapCaptureSetView){window.__kpMapCaptureSetView=true;L.Map.prototype.setView=function(){window.__kpMap=this;return originalSetView.apply(this,arguments);};}
   function getMap(){return window.__kpMap||null;}
   function showPosition(pos){
-    var lat=pos.coords.latitude,lon=pos.coords.longitude,acc=pos.coords.accuracy||0;
-    var m=getMap();
+    var lat=pos.coords.latitude,lon=pos.coords.longitude,acc=pos.coords.accuracy||0,m=getMap();
     if(!m){setTimeout(function(){showPosition(pos)},100);return;}
     btn.classList.add('kp-gps-active');
-    if(!userMarker){
-      userMarker=L.circleMarker([lat,lon],{radius:9,color:'#fff',weight:3,fillColor:'#1976d2',fillOpacity:1,zIndexOffset:10000}).addTo(m);
-      userMarker.bindTooltip('Your location',{permanent:false,direction:'top'});
-    }else userMarker.setLatLng([lat,lon]);
-    if(!accuracyCircle)accuracyCircle=L.circle([lat,lon],{radius:acc,color:'#1976d2',weight:1,fillColor:'#1976d2',fillOpacity:.12,interactive:false}).addTo(m);
-    else accuracyCircle.setLatLng([lat,lon]).setRadius(acc);
+    if(!userMarker){userMarker=L.circleMarker([lat,lon],{radius:9,color:'#fff',weight:3,fillColor:'#1976d2',fillOpacity:1,zIndexOffset:10000}).addTo(m);userMarker.bindTooltip('Your location',{permanent:false,direction:'top'});}else userMarker.setLatLng([lat,lon]);
+    if(!accuracyCircle)accuracyCircle=L.circle([lat,lon],{radius:acc,color:'#1976d2',weight:1,fillColor:'#1976d2',fillOpacity:.12,interactive:false}).addTo(m);else accuracyCircle.setLatLng([lat,lon]).setRadius(acc);
     m.flyTo([lat,lon],Math.max(16,m.getZoom()),{animate:false});
-    var status=document.getElementById('status');
-    if(status)status.textContent='GPS location found • accuracy '+Math.round(acc)+' m';
+    var status=document.getElementById('status');if(status)status.textContent='GPS location found • accuracy '+Math.round(acc)+' m';
   }
-  function fail(err){
-    var status=document.getElementById('status');
-    if(status)status.textContent=err&&err.code===1?'Location permission denied — allow location for this site.':'Unable to get GPS location.';
+  function fail(err){var status=document.getElementById('status');if(status)status.textContent=err&&err.code===1?'Location permission denied — allow location for this site.':'Unable to get GPS location.';}
+  btn.addEventListener('click',function(){if(!navigator.geolocation){fail({code:2});return;}navigator.geolocation.getCurrentPosition(showPosition,fail,{enableHighAccuracy:true,maximumAge:5000,timeout:15000});if(watchId===null)watchId=navigator.geolocation.watchPosition(showPosition,fail,{enableHighAccuracy:true,maximumAge:5000,timeout:20000});});
+}
+function loadScript(src,done){
+  var s=document.querySelector('script[data-kp-src="'+src+'"]');
+  if(s){if(s.dataset.loaded==='1')done();else s.addEventListener('load',done,{once:true});return;}
+  s=document.createElement('script');s.src=src;s.async=true;s.dataset.kpSrc=src;s.onload=function(){s.dataset.loaded='1';done();};s.onerror=function(){console.error('Kaitiaki Pest: failed to load '+src);};document.head.appendChild(s);
+}
+function loadCss(href){if(document.querySelector('link[data-kp-href="'+href+'"]'))return;var l=document.createElement('link');l.rel='stylesheet';l.href=href;l.dataset.kpHref=href;document.head.appendChild(l);}
+function removeTopoTileLayers(){
+  if(!window.__kpMap||!window.L)return;
+  Object.keys(window.__kpMap._layers||{}).forEach(function(id){var lyr=window.__kpMap._layers[id];if(lyr&&lyr._url&&lyr._url.indexOf('/topographic/')>=0){window.__kpMap.removeLayer(lyr);}});
+}
+function installTopoBasemap(){
+  if(window.__kpTopoInstalled||!window.L)return;
+  var radios=document.querySelectorAll('input[name="base"]');if(!radios.length)return;
+  window.__kpTopoInstalled=true;
+  loadCss('https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css');
+  function ensure(callback){
+    if(window.maplibregl&&window.L.maplibreGL){callback();return;}
+    loadScript('https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js',function(){
+      loadScript('https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js',callback);
+    });
   }
-  btn.addEventListener('click',function(){
-    if(!navigator.geolocation){fail({code:2});return;}
-    navigator.geolocation.getCurrentPosition(showPosition,fail,{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
-    if(watchId===null)watchId=navigator.geolocation.watchPosition(showPosition,fail,{enableHighAccuracy:true,maximumAge:5000,timeout:20000});
-  });
+  function currentTopo(){var r=document.querySelector('input[name="base"]:checked');return r&&r.value==='topo';}
+  function addTopo(){
+    var m=window.__kpMap;if(!m||!currentTopo())return;
+    var key=localStorage.getItem('kp_linz_key')||'';
+    if(!key){var st=document.getElementById('mapStatus');if(st)st.textContent='Enter and save your LINZ API key to use Topographic.';return;}
+    ensure(function(){
+      if(!currentTopo())return;
+      removeTopoTileLayers();
+      if(window.__kpTopoGL){try{m.removeLayer(window.__kpTopoGL);}catch(e){}window.__kpTopoGL=null;}
+      var style='https://basemaps.linz.govt.nz/v1/tiles/topographic/EPSG:3857/style/topographic.json?api='+encodeURIComponent(key);
+      window.__kpTopoGL=L.maplibreGL({style:style,attribution:'© LINZ'}).addTo(m);
+      var st=document.getElementById('mapStatus');if(st)st.textContent='LINZ Topographic map loaded.';
+    });
+  }
+  function removeTopo(){if(window.__kpTopoGL&&window.__kpMap){try{window.__kpMap.removeLayer(window.__kpTopoGL);}catch(e){}window.__kpTopoGL=null;}}
+  radios.forEach(function(r){r.addEventListener('change',function(){if(r.value==='topo')addTopo();else removeTopo();});});
+  var save=document.getElementById('saveKey');if(save)save.addEventListener('click',function(){if(currentTopo())addTopo();});
+  setTimeout(function(){if(currentTopo())addTopo();},500);
+}
+function boot(){
+  var drawer=document.getElementById('drawer');if(!drawer){setTimeout(boot,250);return;}
+  addMapPolish();installProjectViewFix();addBrand();installTopoBasemap();
+  if(!document.getElementById('kp-filter-polish-css')){
+    var css=document.createElement('style');css.id='kp-filter-polish-css';css.textContent=''
+    +'.drawer .layer{border-top:1px solid #ccc;padding:0 0 2px}'+'.drawer .layerhead{min-height:58px}'+'.drawer .layerhead .types,.drawer .group .types{font-weight:500;white-space:nowrap}'+'.drawer .layerbody{background:#eee}'+'.drawer .group .head{background:#eee}'+'.drawer .group .body{background:#eee}'+'.drawer .row.all{background:#eee;font-weight:650}'+'.drawer .row.child{background:#fff}'+'.drawer .row input{accent-color:#111}'+'.drawer .group.open>.body,.drawer .layer.open>.layerbody{display:block}'+'.drawer .types:focus,.drawer .switch:focus,.drawer .row input:focus{outline:2px solid #0d594b;outline-offset:2px}';
+    document.head.appendChild(css);
+  }
+  function toggleBody(button,body,owner){if(!body)return;var open=body.style.display==='block';body.style.display=open?'none':'block';if(owner)owner.classList.toggle('open',!open);button.textContent=open?'Show types':'Hide types';}
+  if(!drawer.dataset.kpTypesBound){drawer.dataset.kpTypesBound='1';drawer.addEventListener('click',function(e){var b=e.target.closest('.layerhead .types');if(b&&drawer.contains(b)){e.preventDefault();e.stopPropagation();var layer=b.closest('.layer');toggleBody(b,layer&&layer.querySelector('.layerbody'),layer);return;}var sb=e.target.closest('.group .head .types');if(sb&&drawer.contains(sb)){e.preventDefault();e.stopPropagation();var group=sb.closest('.group');toggleBody(sb,group&&group.querySelector('.body'),group);}},true);}
+  var statusHead=drawer.querySelector('.group[data-kind="status"] .head span');if(statusHead)statusHead.textContent='Trap status';
+  var monHead=drawer.querySelector('.group[data-kind="mon"] .head span');if(monHead)monHead.textContent='Monitoring types';
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 var gpsTimer=setInterval(function(){if(document.getElementById('gps')&&window.L){clearInterval(gpsTimer);installGPS();}},250);
-var viewTimer=setInterval(function(){
-  if(!window.L)return;
-  var m=window.__kpMap;
-  if(m&&m.getZoom()<8){m.setView([-37.99,177.04],12,{animate:false});}
-},500);
+var viewTimer=setInterval(function(){if(!window.L)return;var m=window.__kpMap;if(m&&m.getZoom()<8)m.setView([-37.99,177.04],12,{animate:false});},500);
 setTimeout(function(){clearInterval(viewTimer);},10000);
 })();
