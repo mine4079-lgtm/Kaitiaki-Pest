@@ -1,0 +1,36 @@
+name: Run LINZ topo fix
+on:
+  push:
+    paths:
+      - 'topo-fix.js'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove MapLibre stub so real LINZ topo can load
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('trapnz-layer-ui.js')
+          s=p.read_text()
+          bad="""  if(window.L){
+    window.maplibregl=window.maplibregl||{};
+    if(!window.L.maplibreGL){
+      window.L.maplibreGL=function(){return {addTo:function(){return this;},remove:function(){}};};
+    }
+  }
+"""
+          s=s.replace(bad,'')
+          p.write_text(s)
+          PY
+      - name: Commit topo fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add trapnz-layer-ui.js
+          git diff --cached --quiet || git commit -m 'Load real LINZ Topographic basemap'
+          git push
