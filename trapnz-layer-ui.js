@@ -59,10 +59,30 @@ function addMapPolish(){
   +'@media(max-width:600px){.kp-brand{top:72px}.pill{max-width:calc(100vw - 135px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.right{top:136px!important}.leaflet-control-zoom{display:none}}';
   document.head.appendChild(css);
 }
+function installProjectViewFix(){
+  if(window.__kpProjectViewFix||!window.L)return;
+  window.__kpProjectViewFix=true;
+  var originalFit=L.Map.prototype.fitBounds;
+  var first=true;
+  L.Map.prototype.fitBounds=function(bounds,options){
+    if(first&&bounds&&bounds.getSouthWest&&bounds.getNorthEast){
+      first=false;
+      var sw=bounds.getSouthWest(),ne=bounds.getNorthEast();
+      var spanLat=Math.abs(ne.lat-sw.lat),spanLon=Math.abs(ne.lng-sw.lng);
+      var looksGlobal=spanLat>2||spanLon>2||sw.lat<-40||ne.lat>-35||sw.lng<175||ne.lng>179;
+      if(looksGlobal){
+        bounds=L.latLngBounds([[-38.12,176.90],[-37.86,177.25]]);
+        options=Object.assign({},options||{},{padding:[35,90],maxZoom:13,animate:false});
+      }
+    }
+    return originalFit.call(this,bounds,options);
+  };
+}
 function boot(){
   var drawer=document.getElementById('drawer');
   if(!drawer){setTimeout(boot,250);return;}
   addMapPolish();
+  installProjectViewFix();
   if(!document.getElementById('kp-filter-polish-css')){
     var css=document.createElement('style');css.id='kp-filter-polish-css';css.textContent=''
     +'.drawer .layer{border-top:1px solid #ccc;padding:0 0 2px}'
