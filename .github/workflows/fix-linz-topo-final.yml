@@ -35,3 +35,5 @@ jobs:
           git add index.html trapnz-layer-ui.js
           git diff --cached --quiet || git commit -m 'Fix LINZ topographic renderer URL'
           git push
+
+# Trigger final topo repair
