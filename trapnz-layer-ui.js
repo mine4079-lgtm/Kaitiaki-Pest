@@ -5,6 +5,15 @@
    At overview scale, dense points become clear count bubbles; zooming in
    returns the normal individual points and labels. */
 function loadCore(){
+  /* Keep the LINZ Topo50 raster from index.html. The core's MapLibre
+     topographic layer is intentionally bypassed because the Trap.NZ-style
+     raster is clearer and closer to the field map the team already uses. */
+  if(window.L){
+    window.maplibregl=window.maplibregl||{};
+    if(!window.L.maplibreGL){
+      window.L.maplibreGL=function(){return {addTo:function(){return this;},remove:function(){}};};
+    }
+  }
   var s=document.createElement('script');
   s.src='trapnz-layer-ui-core.js';
   s.onload=installClusters;
