@@ -13,7 +13,7 @@ function installLinzTopoPatch(){
         if(key){
           var topoUrl='https://basemaps.linz.govt.nz/v1/tiles/topo-raster/WebMercatorQuad/{z}/{x}/{y}.webp?api='+encodeURIComponent(key);
           var o=Object.assign({},options||{});
-          o.maxZoom=15;
+          o.maxZoom=20;
           o.maxNativeZoom=15;
           o.attribution='© Toitū Te Whenua LINZ CC BY 4.0';
           return nativeTileLayer(topoUrl,o);
@@ -107,8 +107,7 @@ function installContourEnhancer(){
     try{
       (gl.getStyle().layers||[]).forEach(function(layer){
         if(layer['source-layer']!=='contours'||layer.type!=='line')return;
-        var id=layer.id, type=String(layer.type||'').toLowerCase();
-        var index=String(layer['type']||'');
+        var id=layer.id;
         try{
           gl.setPaintProperty(id,'line-color','#8b5a2b');
           gl.setPaintProperty(id,'line-opacity',0.82);
