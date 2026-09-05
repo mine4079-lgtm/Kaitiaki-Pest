@@ -156,9 +156,9 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   document.addEventListener('visibilitychange',apply);
 })();
 
-/* Deep-zoom label polish: keep trap labels readable without changing Trap.NZ
-   data, points, lines, colours or click behaviour. Labels are collision-hidden
-   at close overview zooms, then progressively restored as the user zooms in. */
+/* Deep-zoom label polish: progressively reduce label density so the map behaves
+   more like Trap.NZ: sparse labels at close overview zooms, more labels as you
+   zoom in, and all trap numbers at deep zoom. This only changes display. */
 (function(){
   'use strict';
   if(window.__kpLabelPolishInstalled)return;
@@ -166,22 +166,28 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   function getMap(){return window.__kpMap||null;}
   function labelMarkers(m){
     var out=[];
-    Object.keys(m._layers||{}).forEach(function(id){
-      var l=m._layers[id];
-      if(!l||!l._icon||!l.options||!l.options.icon) return;
-      var cls=String(l.options.icon.options&&l.options.icon.options.className||'');
-      if(cls.indexOf('label')<0)return;
-      var ll=l.getLatLng&&l.getLatLng();
-      if(!ll||!isFinite(ll.lat)||!isFinite(ll.lng))return;
-      out.push(l);
-    });
+    function walk(group){
+      Object.keys(group&&group._layers||{}).forEach(function(id){
+        var l=group._layers[id];
+        if(!l)return;
+        if(l._layers){walk(l);return;}
+        if(!l._icon||!l.options||!l.options.icon)return;
+        var cls=String(l.options.icon.options&&l.options.icon.options.className||'');
+        if(cls.indexOf('label')<0)return;
+        var ll=l.getLatLng&&l.getLatLng();
+        if(!ll||!isFinite(ll.lat)||!isFinite(ll.lng))return;
+        out.push(l);
+      });
+    }
+    walk(m);
     return out;
   }
   function apply(){
     var m=getMap();if(!m)return;
     var z=m.getZoom(),labels=labelMarkers(m);if(!labels.length)return;
-    var spacing=z<15?0: z===15?42 : z===16?34 : z===17?26 : z>=18?0:30;
+    var spacing=z<15?999: z===15?72 : z===16?54 : z===17?38 : z>=18?0:30;
     labels.forEach(function(l){if(l._icon)l._icon.style.display='';});
+    if(z<15){labels.forEach(function(l){if(l._icon)l._icon.style.display='none';});return;}
     if(!spacing)return;
     var kept=[];
     labels.sort(function(a,b){
