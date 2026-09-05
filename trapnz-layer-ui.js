@@ -3,7 +3,8 @@
 /* Kaitiaki Pest — LINZ Topo50 + display clustering. */
 
 /* The main index.html owns the Leaflet map and base-map selector.
-   Keep the legacy Topo50 raster fallback for clients that cannot load WebGL. */
+   Use LINZ's current Topo50 raster tiles so the map matches the
+   LINZ Basemaps Topo50 view rather than the older CDN layer. */
 function installLinzTopoPatch(){
   if(!window.L||window.__kpLinzTopoPatch)return;
   window.__kpLinzTopoPatch=true;
@@ -14,12 +15,11 @@ function installLinzTopoPatch(){
         var match=url.match(/[?&]api=([^&]+)/i);
         var key=match?decodeURIComponent(match[1]):(localStorage.getItem('kp_linz_key')||'');
         if(key){
-          var topoUrl='https://tiles-{s}.data-cdn.linz.govt.nz/services;key='+encodeURIComponent(key)+'/tiles/v4/layer=50767/EPSG:3857/{z}/{x}/{y}.png';
+          var topoUrl='https://basemaps.linz.govt.nz/v1/tiles/topo-raster/WebMercatorQuad/{z}/{x}/{y}.webp?api='+encodeURIComponent(key);
           var o=Object.assign({},options||{});
-          o.subdomains=['a','b','c','d'];
-          o.maxZoom=17;
-          o.maxNativeZoom=17;
-          o.attribution='© LINZ CC BY 4.0';
+          o.maxZoom=15;
+          o.maxNativeZoom=15;
+          o.attribution='© Toitū Te Whenua LINZ CC BY 4.0';
           return nativeTileLayer(topoUrl,o);
         }
       }
