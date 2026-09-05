@@ -63,20 +63,40 @@ function installProjectViewFix(){
   if(window.__kpProjectViewFix||!window.L)return;
   window.__kpProjectViewFix=true;
   var originalFit=L.Map.prototype.fitBounds;
+  var originalSet=L.Map.prototype.setView;
   var first=true;
+  function saneBounds(){return L.latLngBounds([[-38.12,176.90],[-37.86,177.25]]);}
+  L.Map.prototype.setView=function(center,zoom,options){
+    if(center&&Array.isArray(center)&&zoom!==undefined&&zoom<5){
+      var lat=+center[0],lng=+center[1];
+      if(!isFinite(lat)||!isFinite(lng)||Math.abs(lat)>80||Math.abs(lng)>180){center=[-37.99,177.04];zoom=12;}
+      else if(Math.abs(lat)<10||Math.abs(lng)<20){center=[-37.99,177.04];zoom=12;}
+    }
+    return originalSet.call(this,center,zoom,options);
+  };
   L.Map.prototype.fitBounds=function(bounds,options){
-    if(first&&bounds&&bounds.getSouthWest&&bounds.getNorthEast){
-      first=false;
+    if(bounds&&bounds.getSouthWest&&bounds.getNorthEast){
       var sw=bounds.getSouthWest(),ne=bounds.getNorthEast();
       var spanLat=Math.abs(ne.lat-sw.lat),spanLon=Math.abs(ne.lng-sw.lng);
       var looksGlobal=spanLat>2||spanLon>2||sw.lat<-40||ne.lat>-35||sw.lng<175||ne.lng>179;
       if(looksGlobal){
-        bounds=L.latLngBounds([[-38.12,176.90],[-37.86,177.25]]);
+        bounds=saneBounds();
         options=Object.assign({},options||{},{padding:[35,90],maxZoom:13,animate:false});
       }
     }
     return originalFit.call(this,bounds,options);
   };
+}
+function forceProjectView(){
+  if(!window.L)return;
+  var el=document.getElementById('map');
+  if(!el)return;
+  var id=el._leaflet_id;
+  if(!id)return;
+  var m=el._leaflet_map||null;
+  if(!m&&window.__kpMap)m=window.__kpMap;
+  if(!m)return;
+  if(m.getZoom()<8){m.setView([-37.99,177.04],12,{animate:false});}
 }
 function boot(){
   var drawer=document.getElementById('drawer');
@@ -119,6 +139,11 @@ function installGPS(){
     window.__kpMapCaptureInstalled=true;
     L.Map.prototype.flyTo=function(){window.__kpMap=this;return originalFlyTo.apply(this,arguments);};
   }
+  var originalSetView=L.Map.prototype.setView;
+  if(!window.__kpMapCaptureSetView){
+    window.__kpMapCaptureSetView=true;
+    L.Map.prototype.setView=function(){window.__kpMap=this;return originalSetView.apply(this,arguments);};
+  }
   function getMap(){return window.__kpMap||null;}
   function showPosition(pos){
     var lat=pos.coords.latitude,lon=pos.coords.longitude,acc=pos.coords.accuracy||0;
@@ -147,4 +172,10 @@ function installGPS(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 var gpsTimer=setInterval(function(){if(document.getElementById('gps')&&window.L){clearInterval(gpsTimer);installGPS();}},250);
+var viewTimer=setInterval(function(){
+  if(!window.L)return;
+  var m=window.__kpMap;
+  if(m&&m.getZoom()<8){m.setView([-37.99,177.04],12,{animate:false});}
+},500);
+setTimeout(function(){clearInterval(viewTimer);},10000);
 })();
