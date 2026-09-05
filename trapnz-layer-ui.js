@@ -155,3 +155,59 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   },250);
   document.addEventListener('visibilitychange',apply);
 })();
+
+/* Deep-zoom label polish: keep trap labels readable without changing Trap.NZ
+   data, points, lines, colours or click behaviour. Labels are collision-hidden
+   at close overview zooms, then progressively restored as the user zooms in. */
+(function(){
+  'use strict';
+  if(window.__kpLabelPolishInstalled)return;
+  window.__kpLabelPolishInstalled=true;
+  function getMap(){return window.__kpMap||null;}
+  function labelMarkers(m){
+    var out=[];
+    Object.keys(m._layers||{}).forEach(function(id){
+      var l=m._layers[id];
+      if(!l||!l._icon||!l.options||!l.options.icon) return;
+      var cls=String(l.options.icon.options&&l.options.icon.options.className||'');
+      if(cls.indexOf('label')<0)return;
+      var ll=l.getLatLng&&l.getLatLng();
+      if(!ll||!isFinite(ll.lat)||!isFinite(ll.lng))return;
+      out.push(l);
+    });
+    return out;
+  }
+  function apply(){
+    var m=getMap();if(!m)return;
+    var z=m.getZoom(),labels=labelMarkers(m);if(!labels.length)return;
+    var spacing=z<15?0: z===15?42 : z===16?34 : z===17?26 : z>=18?0:30;
+    labels.forEach(function(l){if(l._icon)l._icon.style.display='';});
+    if(!spacing)return;
+    var kept=[];
+    labels.sort(function(a,b){
+      var ap=a.getLatLng(),bp=b.getLatLng();
+      return ap.lat-bp.lat || ap.lng-bp.lng;
+    });
+    labels.forEach(function(l){
+      var p=m.latLngToContainerPoint(l.getLatLng()),ok=true;
+      for(var i=0;i<kept.length;i++){
+        var dx=p.x-kept[i].x,dy=p.y-kept[i].y;
+        if(dx*dx+dy*dy<spacing*spacing){ok=false;break;}
+      }
+      if(l._icon)l._icon.style.display=ok?'':'none';
+      if(ok)kept.push({x:p.x,y:p.y});
+    });
+  }
+  var timer=null;
+  function schedule(){clearTimeout(timer);timer=setTimeout(apply,60);}
+  function hook(){
+    var m=getMap();
+    if(!m){setTimeout(hook,300);return;}
+    if(m.__kpLabelEvents)return;
+    m.__kpLabelEvents=true;
+    m.on('zoomend moveend resize',schedule);
+    setInterval(schedule,900);
+    setTimeout(apply,700);
+  }
+  hook();
+})();
