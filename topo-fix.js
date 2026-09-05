@@ -1,5 +1,6 @@
 (function(){
   'use strict';
+  // LINZ Topographic trigger/fallback helper.
   function getKey(){ return localStorage.getItem('kp_linz_key') || ''; }
   function fixTopo(){
     if(!window.kpLeafletMap) return;
