@@ -18,9 +18,15 @@ jobs:
 
           p = Path('trapnz-layer-ui.js')
           s = p.read_text()
-          old = "https://basemaps.linz.govt.nz/v1/tiles/topographic/EPSG:3857/style/topographic.json"
-          new = "https://basemaps.linz.govt.nz/v1/styles/topographic-v2.json"
-          p.write_text(s.replace(old, new))
+          bad_stub = """  if(window.L){
+    window.maplibregl=window.maplibregl||{};
+    if(!window.L.maplibreGL){
+      window.L.maplibreGL=function(){return {addTo:function(){return this;},remove:function(){}};};
+    }
+  }
+"""
+          s = s.replace(bad_stub, "")
+          p.write_text(s)
 
           p = Path('index.html')
           s = p.read_text()
@@ -33,7 +39,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html trapnz-layer-ui.js
-          git diff --cached --quiet || git commit -m 'Fix LINZ topographic renderer URL'
+          git diff --cached --quiet || git commit -m 'Fix LINZ topographic MapLibre loading'
           git push
 
 # Trigger final topo repair
