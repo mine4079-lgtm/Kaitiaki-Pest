@@ -2,13 +2,8 @@
 'use strict';
 /* Kaitiaki Pest — LINZ Topo50 + display clustering. */
 
-/*
-   The main index.html already owns the Leaflet map and base-map selector.
-   Patch Leaflet's tileLayer call so the Topographic choice uses the real
-   LINZ Topo50 raster tiles (layer 50767), which Leaflet can display directly.
-   The newer LINZ "topographic" service is vector/PBF + StyleJSON, not a PNG
-   raster, so pointing Leaflet at it as .webp does not work correctly.
-*/
+/* The main index.html owns the Leaflet map and base-map selector.
+   Keep the legacy Topo50 raster fallback for clients that cannot load WebGL. */
 function installLinzTopoPatch(){
   if(!window.L||window.__kpLinzTopoPatch)return;
   window.__kpLinzTopoPatch=true;
@@ -35,15 +30,6 @@ function installLinzTopoPatch(){
 
 function loadCore(){
   installLinzTopoPatch();
-  /* Keep the LINZ Topo50 raster from index.html. The core's MapLibre
-     topographic layer is intentionally bypassed because the Trap.NZ-style
-     raster is clearer and closer to the field map the team already uses. */
-  if(window.L){
-    window.maplibregl=window.maplibregl||{};
-    if(!window.L.maplibreGL){
-      window.L.maplibreGL=function(){return {addTo:function(){return this;},remove:function(){}};};
-    }
-  }
   var s=document.createElement('script');
   s.src='trapnz-layer-ui-core.js';
   s.onload=installClusters;
