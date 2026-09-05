@@ -123,8 +123,6 @@ function installTopoBasemap(){
   if(window.__kpTopoInstalled||!window.L)return;
   var radios=document.querySelectorAll('input[name="base"]');if(!radios.length)return;
   window.__kpTopoInstalled=true;
-  // Capture the existing Leaflet map when the base layer is switched.
-  // index.html creates the map before this helper script is loaded.
   if(!window.__kpTopoMapCapture){
     window.__kpTopoMapCapture=true;
     var kpOriginalRemoveLayer=L.Map.prototype.removeLayer;
@@ -156,6 +154,25 @@ function installTopoBasemap(){
   var save=document.getElementById('saveKey');if(save)save.addEventListener('click',function(){if(currentTopo())addTopo();});
   setTimeout(function(){if(currentTopo())addTopo();},500);
 }
+/* Display-view improvement: make Trap.NZ points easier to see before deep zoom.
+   The data, colours and click behaviour stay unchanged. Only the rendered point
+   radius is increased at overview zoom levels. */
+function installDisplayView(){
+  if(window.__kpDisplayViewInstalled||!window.L)return;
+  window.__kpDisplayViewInstalled=true;
+  var original=L.Canvas&&L.Canvas.prototype._updateCircle;
+  if(!original)return;
+  L.Canvas.prototype._updateCircle=function(layer){
+    var m=this._map,z=m?m.getZoom():15,base=layer&&layer.options?+layer.options.radius:5;
+    var r=base;
+    if(z<11)r=Math.max(base,4.5);
+    else if(z<13)r=Math.max(base,6);
+    else if(z<15)r=Math.max(base,6.5);
+    else r=base;
+    var old=layer.options.radius;layer.options.radius=r;
+    try{return original.call(this,layer);}finally{layer.options.radius=old;}
+  };
+}
 function boot(){
   var drawer=document.getElementById('drawer');if(!drawer){setTimeout(boot,250);return;}
   addMapPolish();installProjectViewFix();addBrand();installTopoBasemap();
@@ -168,6 +185,7 @@ function boot(){
   if(!drawer.dataset.kpTypesBound){drawer.dataset.kpTypesBound='1';drawer.addEventListener('click',function(e){var b=e.target.closest('.layerhead .types');if(b&&drawer.contains(b)){e.preventDefault();e.stopPropagation();var layer=b.closest('.layer');toggleBody(b,layer&&layer.querySelector('.layerbody'),layer);return;}var sb=e.target.closest('.group .head .types');if(sb&&drawer.contains(sb)){e.preventDefault();e.stopPropagation();var group=sb.closest('.group');toggleBody(sb,group&&group.querySelector('.body'),group);}},true);}
   var statusHead=drawer.querySelector('.group[data-kind="status"] .head span');if(statusHead)statusHead.textContent='Trap status';
   var monHead=drawer.querySelector('.group[data-kind="mon"] .head span');if(monHead)monHead.textContent='Monitoring types';
+  installDisplayView();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 var gpsTimer=setInterval(function(){if(document.getElementById('gps')&&window.L){clearInterval(gpsTimer);installGPS();}},250);
