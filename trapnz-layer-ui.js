@@ -44,16 +44,23 @@ function installGPS(){
   if(!btn)return;
   window.__kpGpsInstalled=true;
   var userMarker=null,accuracyCircle=null,watchId=null;
+  var originalFlyTo=L.Map.prototype.flyTo;
+  if(!window.__kpMapCaptureInstalled){
+    window.__kpMapCaptureInstalled=true;
+    L.Map.prototype.flyTo=function(){window.__kpMap=this;return originalFlyTo.apply(this,arguments);};
+  }
+  function getMap(){return window.__kpMap||null;}
   function showPosition(pos){
     var lat=pos.coords.latitude,lon=pos.coords.longitude,acc=pos.coords.accuracy||0;
-    if(!window.map)return;
+    var m=getMap();
+    if(!m){setTimeout(function(){showPosition(pos)},100);return;}
     if(!userMarker){
-      userMarker=L.circleMarker([lat,lon],{radius:8,color:'#fff',weight:3,fillColor:'#1976d2',fillOpacity:1,zIndexOffset:10000}).addTo(window.map);
+      userMarker=L.circleMarker([lat,lon],{radius:9,color:'#fff',weight:3,fillColor:'#1976d2',fillOpacity:1,zIndexOffset:10000}).addTo(m);
       userMarker.bindTooltip('Your location',{permanent:false,direction:'top'});
     }else userMarker.setLatLng([lat,lon]);
-    if(!accuracyCircle)accuracyCircle=L.circle([lat,lon],{radius:acc,color:'#1976d2',weight:1,fillColor:'#1976d2',fillOpacity:.12,interactive:false}).addTo(window.map);
+    if(!accuracyCircle)accuracyCircle=L.circle([lat,lon],{radius:acc,color:'#1976d2',weight:1,fillColor:'#1976d2',fillOpacity:.12,interactive:false}).addTo(m);
     else accuracyCircle.setLatLng([lat,lon]).setRadius(acc);
-    window.map.flyTo([lat,lon],Math.max(16,window.map.getZoom()),{animate:false});
+    m.flyTo([lat,lon],Math.max(16,m.getZoom()),{animate:false});
     var status=document.getElementById('status');
     if(status)status.textContent='GPS location found • accuracy '+Math.round(acc)+' m';
   }
