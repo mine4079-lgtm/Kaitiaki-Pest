@@ -23,19 +23,12 @@ jobs:
           from pathlib import Path
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
-          old = "https://basemaps.linz.govt.nz/v1/tiles/topographic/WebMercatorQuad/{z}/{x}/{y}.webp?api="
-          new = "https://tiles-{s}.data-cdn.linz.govt.nz/services;key="
-          if old in s:
-              s = s.replace(old, new + "__LINZ_KEY__/tiles/v4/layer=50767/EPSG:3857/{z}/{x}/{y}.png?api=")
-              s = s.replace("__LINZ_KEY__" , "")
-              # The existing JavaScript already appends encodeURIComponent(k) after the URL prefix.
-              s = s.replace("/services;key=/tiles/v4/layer=50767/EPSG:3857/{z}/{x}/{y}.png?api=", "/services;key=")
-          # Directly replace the complete Topo expression with a Leaflet-compatible LINZ Topo50 raster URL.
-          old_expr = "type==='topo'&&k?L.tileLayer('https://basemaps.linz.govt.nz/v1/tiles/topographic/WebMercatorQuad/{z}/{x}/{y}.webp?api='+encodeURIComponent(k),{maxZoom:22,attribution:'© LINZ'}):street()"
-          new_expr = "type==='topo'&&k?L.tileLayer('https://tiles-{s}.data-cdn.linz.govt.nz/services;key='+encodeURIComponent(k)+'/tiles/v4/layer=50767/EPSG:3857/{z}/{x}/{y}.png',{subdomains:'abcd',maxZoom:20,attribution:'© Toitū Te Whenua LINZ CC BY 4.0'}):street()"
-          if old_expr in s:
-              s = s.replace(old_expr, new_expr)
-          p.write_text(s, encoding='utf-8')
+          old = "type==='topo'&&k?L.tileLayer('https://basemaps.linz.govt.nz/v1/tiles/topographic/WebMercatorQuad/{z}/{x}/{y}.webp?api='+encodeURIComponent(k),{maxZoom:22,attribution:'© LINZ'}):street()"
+          new = "type==='topo'&&k?L.tileLayer('https://tiles-{s}.data-cdn.linz.govt.nz/services;key='+encodeURIComponent(k)+'/tiles/v4/layer=50767/EPSG:3857/{z}/{x}/{y}.png',{subdomains:'abcd',maxZoom:20,attribution:'© Toitū Te Whenua LINZ CC BY 4.0'}):street()"
+          if old not in s:
+              print('Topo expression already fixed or not found; leaving index.html unchanged.')
+          else:
+              p.write_text(s.replace(old, new), encoding='utf-8')
           PY
 
       - name: Commit fix
