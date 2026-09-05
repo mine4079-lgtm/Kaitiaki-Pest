@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 /* Kaitiaki Pest — LINZ vector Topographic basemap upgrade.
-   Replaces the blurry raster topo layer with LINZ vector topography. */
+   Keeps the terrain useful at working zoom: stronger contours, deep zoom, less hillshade blur. */
 function loadCss(href){
   if(document.querySelector('link[data-kp-href="'+href+'"]'))return;
   var l=document.createElement('link');l.rel='stylesheet';l.href=href;l.dataset.kpHref=href;document.head.appendChild(l);
@@ -37,19 +37,31 @@ function removeOldTopo(m){
 }
 function enhanceContours(gl){
   if(!gl||!gl.getStyle)return;
-  try{(gl.getStyle().layers||[]).forEach(function(layer){
-    if(layer.type!=='line'||String(layer['source-layer']||'').toLowerCase()!=='contours')return;
-    try{
-      gl.setPaintProperty(layer.id,'line-color','#8b5a2b');
-      gl.setPaintProperty(layer.id,'line-opacity',0.9);
-      gl.setPaintProperty(layer.id,'line-width',['interpolate',['linear'],['zoom'],9,0.8,11,1.15,13,1.5,15,2,18,2.4,22,2.8]);
-    }catch(e){}
-  });}catch(e){console.warn('Contour enhancement:',e);}
+  try{
+    (gl.getStyle().layers||[]).forEach(function(layer){
+      var sourceLayer=String(layer['source-layer']||'').toLowerCase();
+      if(layer.type==='line'&&sourceLayer==='contours'){
+        try{
+          /* Keep contour style alive beyond the source's native zoom 15.
+             The vector geometry scales cleanly rather than disappearing. */
+          gl.setLayerZoomRange(layer.id,8,23);
+          gl.setPaintProperty(layer.id,'line-color','#8b5a2b');
+          gl.setPaintProperty(layer.id,'line-opacity',0.92);
+          gl.setPaintProperty(layer.id,'line-width',['interpolate',['linear'],['zoom'],8,0.55,10,0.8,12,1.15,14,1.65,16,2.1,18,2.5,20,2.8,23,3.1]);
+        }catch(e){}
+      }
+      /* Keep hillshade subtle at deep zoom so terrain lines are not muddy. */
+      if(layer.type==='raster'&&/(hillshade|relief|shade)/i.test(layer.id+' '+(layer.source||''))){
+        try{gl.setPaintProperty(layer.id,'raster-opacity',['interpolate',['linear'],['zoom'],8,0.55,12,0.4,15,0.25,18,0.16,23,0.12]);}catch(e){}
+      }
+    });
+  }catch(e){console.warn('Terrain enhancement:',e);}
 }
 function addTopo(){
   var m=getMap();if(!m||!isTopo())return;
   var key=localStorage.getItem('kp_linz_key')||'',status=document.getElementById('mapStatus');
   if(!key){if(status)status.textContent='Enter and save your LINZ API key to use Topographic.';return;}
+  try{m.setMaxZoom(22);m.options.maxZoom=22;}catch(e){}
   loadCss('https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css');
   function finish(){
     if(!window.L.maplibreGL||!isTopo())return;
@@ -59,8 +71,9 @@ function addTopo(){
     var glLayer=L.maplibreGL({style:style,attribution:'© Toitū Te Whenua LINZ CC BY 4.0'});
     window.__kpTopoGL=glLayer;glLayer.addTo(m);
     var gl=glLayer.getMaplibreMap?glLayer.getMaplibreMap():glLayer._glMap;
-    if(gl){try{gl.setMaxZoom(22);}catch(e){}
-      gl.on('load',function(){enhanceContours(gl);if(status)status.textContent='LINZ Topographic vector map loaded • contours sharp at deep zoom.';});
+    if(gl){
+      try{gl.setMaxZoom(22);gl.setMinZoom(5);}catch(e){}
+      gl.on('load',function(){enhanceContours(gl);if(status)status.textContent='LINZ Topographic loaded • clear contours to zoom 22.';});
       gl.on('styledata',function(){setTimeout(function(){enhanceContours(gl);},40);});
     }
     if(status)status.textContent='Loading LINZ Topographic vector map…';
