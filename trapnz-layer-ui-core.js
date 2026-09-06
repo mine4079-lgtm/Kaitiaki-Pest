@@ -120,3 +120,60 @@ function boot(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
+
+/* Startup/location fix.
+   Keep the first view on the Korehāhā Whakahau operating area instead of
+   fitting every historical/outlying feature in the dataset. Also provide a
+   visible GPS dot when the phone location button is used. */
+(function(){
+  'use strict';
+  var HOME=[-37.99,177.04],HOME_ZOOM=13;
+  function getMap(){return window.__kpMap||null;}
+  function goHome(){
+    var m=getMap();if(!m)return false;
+    try{m.setView(HOME,HOME_ZOOM,{animate:false});return true;}catch(e){return false;}
+  }
+  function install(){
+    var m=getMap();
+    if(!m){setTimeout(install,250);return;}
+    if(!m.__kpStartupFix){
+      m.__kpStartupFix=true;
+      setTimeout(function(){
+        var s=document.getElementById('status');
+        if(s&&(/Trap\\.NZ data loaded|sync complete/i.test(s.textContent||'')))goHome();
+        else setTimeout(goHome,1200);
+      },700);
+      var status=document.getElementById('status');
+      if(status){
+        var observer=new MutationObserver(function(){
+          var t=status.textContent||'';
+          if(/Trap\\.NZ (sync complete|data loaded)/i.test(t))setTimeout(goHome,100);
+        });
+        observer.observe(status,{childList:true,characterData:true,subtree:true});
+      }
+    }
+    installGps(m);
+  }
+  function installGps(m){
+    var b=document.getElementById('gps');if(!b||b.__kpGpsFix)return;
+    b.__kpGpsFix=true;
+    var marker=null,accuracy=null;
+    b.onclick=function(){
+      if(!navigator.geolocation){var s=document.getElementById('status');if(s)s.textContent='Location is not available on this device.';return;}
+      var s=document.getElementById('status');if(s)s.textContent='Finding your location…';
+      navigator.geolocation.getCurrentPosition(function(p){
+        var ll=[p.coords.latitude,p.coords.longitude];
+        if(marker)m.removeLayer(marker);
+        if(accuracy)m.removeLayer(accuracy);
+        accuracy=L.circle(ll,{radius:Math.max(5,p.coords.accuracy||10),color:'#2563eb',weight:2,fillOpacity:.12});
+        marker=L.circleMarker(ll,{radius:9,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1});
+        accuracy.addTo(m);marker.addTo(m);
+        m.setView(ll,Math.max(16,m.getZoom()),{animate:false});
+        if(s)s.textContent='Your location • GPS accuracy '+Math.round(p.coords.accuracy||0)+' m';
+      },function(err){
+        if(s)s.textContent=err&&err.code===1?'Location permission was denied. Allow location for this site.':'Could not get your location.';
+      },{enableHighAccuracy:true,maximumAge:30000,timeout:12000});
+    };
+  }
+  install();
+})();
