@@ -1,20 +1,6 @@
 (function(){
 'use strict';
-/* Kaitiaki Pest — LINZ vector Topographic basemap upgrade.
-   Uses the working LINZ raster topo as a guaranteed fallback while the vector
-   topographic layer loads. If MapLibre/LINZ vector tiles fail, the map stays usable. */
-function loadCss(href){
-  if(document.querySelector('link[data-kp-href="'+href+'"]'))return;
-  var l=document.createElement('link');l.rel='stylesheet';l.href=href;l.dataset.kpHref=href;document.head.appendChild(l);
-}
-function loadScript(src,done){
-  var old=document.querySelector('script[data-kp-src="'+src+'"]');
-  if(old){if(old.dataset.loaded==='1')done();else old.addEventListener('load',done,{once:true});return;}
-  var s=document.createElement('script');s.src=src;s.async=true;s.dataset.kpSrc=src;
-  s.onload=function(){s.dataset.loaded='1';done();};
-  s.onerror=function(){console.error('Kaitiaki Pest: failed to load '+src);};
-  document.head.appendChild(s);
-}
+/* Kaitiaki Pest — startup/location fix. */
 function captureMap(){
   if(!window.L)return null;
   if(window.__kpMap)return window.__kpMap;
@@ -22,158 +8,53 @@ function captureMap(){
   if(L.Map&&Array.isArray(L.Map._instances)&&L.Map._instances.length){window.__kpMap=L.Map._instances[0];return window.__kpMap;}
   if(window.__kpMapCaptureInstalled)return null;
   window.__kpMapCaptureInstalled=true;
-  var sv=L.Map.prototype.setView,fl=L.Map.prototype.flyTo,rl=L.Map.prototype.removeLayer;
+  var sv=L.Map.prototype.setView,fl=L.Map.prototype.flyTo;
   L.Map.prototype.setView=function(){window.__kpMap=this;return sv.apply(this,arguments);};
   L.Map.prototype.flyTo=function(){window.__kpMap=this;return fl.apply(this,arguments);};
-  L.Map.prototype.removeLayer=function(layer){window.__kpMap=this;return rl.call(this,layer);};
-  return window.__kpMap||null;
+  return null;
 }
 function getMap(){return window.__kpMap||captureMap();}
-function isTopo(){var r=document.querySelector('input[name="base"]:checked');return !!(r&&r.value==='topo');}
-function findRasterTopo(m){
-  var found=null;
-  Object.keys(m._layers||{}).forEach(function(id){
-    var lyr=m._layers[id],u=lyr&&lyr._url||'';
-    if(u.indexOf('/topographic/')>=0||u.indexOf('/topo-raster/')>=0)found=lyr;
-  });
-  return found;
-}
-function enhanceContours(gl){
-  if(!gl||!gl.getStyle)return;
-  try{
-    (gl.getStyle().layers||[]).forEach(function(layer){
-      var sourceLayer=String(layer['source-layer']||'').toLowerCase();
-      if(layer.type==='line'&&sourceLayer==='contours'){
-        try{
-          gl.setLayerZoomRange(layer.id,8,23);
-          gl.setPaintProperty(layer.id,'line-color','#8b5a2b');
-          gl.setPaintProperty(layer.id,'line-opacity',0.92);
-          gl.setPaintProperty(layer.id,'line-width',['interpolate',['linear'],['zoom'],8,0.55,10,0.8,12,1.15,14,1.65,16,2.1,18,2.5,20,2.8,23,3.1]);
-        }catch(e){}
-      }
-      if(layer.type==='raster'&&/(hillshade|relief|shade)/i.test(layer.id+' '+(layer.source||''))){
-        try{gl.setPaintProperty(layer.id,'raster-opacity',['interpolate',['linear'],['zoom'],8,0.55,12,0.4,15,0.25,18,0.16,23,0.12]);}catch(e){}
-      }
-    });
-  }catch(e){console.warn('Terrain enhancement:',e);}
-}
-function addTopo(){
-  var m=getMap();if(!m||!isTopo())return;
-  var key=localStorage.getItem('kp_linz_key')||'',status=document.getElementById('mapStatus');
-  if(!key){if(status)status.textContent='Enter and save your LINZ API key to use Topographic.';return;}
-  try{m.setMaxZoom(22);m.options.maxZoom=22;}catch(e){}
-  loadCss('https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css');
-  function finish(){
-    if(!window.L.maplibreGL||!isTopo())return;
-    /* Keep the working LINZ raster underneath until vector tiles are proven OK. */
-    var fallback=findRasterTopo(m);
-    if(window.__kpTopoGL){try{m.removeLayer(window.__kpTopoGL);}catch(e){}window.__kpTopoGL=null;}
-    var style='https://basemaps.linz.govt.nz/v1/styles/topographic-v2.json?api='+encodeURIComponent(key);
-    var glLayer=L.maplibreGL({style:style,attribution:'© Toitū Te Whenua LINZ CC BY 4.0'});
-    window.__kpTopoGL=glLayer;glLayer.addTo(m);
-    var gl=glLayer.getMaplibreMap?glLayer.getMaplibreMap():glLayer._glMap;
-    var failed=false;
-    function fallbackToRaster(){
-      if(failed)return;failed=true;
-      try{m.removeLayer(glLayer);}catch(e){}
-      window.__kpTopoGL=null;
-      if(fallback&&!m.hasLayer(fallback))fallback.addTo(m);
-      if(status)status.textContent='LINZ vector topo unavailable — using reliable Topo50 raster.';
-    }
-    if(gl){
-      try{gl.setMaxZoom(22);gl.setMinZoom(5);}catch(e){}
-      gl.on('load',function(){
-        if(failed)return;
-        enhanceContours(gl);
-        if(fallback&&m.hasLayer(fallback))m.removeLayer(fallback);
-        if(status)status.textContent='LINZ Topographic loaded • clear contours to zoom 22.';
-      });
-      gl.on('error',function(e){console.warn('LINZ vector topo error:',e);fallbackToRaster();});
-      gl.on('styledata',function(){setTimeout(function(){enhanceContours(gl);},40);});
-    }else fallbackToRaster();
-    if(status)status.textContent='Loading LINZ Topographic vector map…';
-    setTimeout(function(){if(window.__kpTopoGL===glLayer&&fallback&&gl&&gl.isStyleLoaded&&!gl.isStyleLoaded())fallbackToRaster();},9000);
-  }
-  if(window.maplibregl&&window.L.maplibreGL)finish();
-  else loadScript('https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js',function(){
-    loadScript('https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js',finish);
-  });
-}
-function removeTopo(){var m=getMap();if(window.__kpTopoGL&&m){try{m.removeLayer(window.__kpTopoGL);}catch(e){}window.__kpTopoGL=null;}}
-function polish(){
+function addPolish(){
   if(document.getElementById('kp-map-polish-css'))return;
-  var css=document.createElement('style');css.id='kp-map-polish-css';css.textContent=''
-   +'.label{font-weight:800!important;text-shadow:0 1px 3px #fff,0 -1px 3px #fff,1px 0 3px #fff,-1px 0 3px #fff!important}'
-   +'.leaflet-control-attribution{font-size:9px!important;background:rgba(255,255,255,.75)!important}'
-   +'.leaflet-popup-content-wrapper{border-radius:14px!important}'
-   +'.leaflet-popup-content{margin:13px!important}';
+  var css=document.createElement('style');css.id='kp-map-polish-css';
+  css.textContent='.label{font-weight:800!important;text-shadow:0 1px 3px #fff,0 -1px 3px #fff,1px 0 3px #fff,-1px 0 3px #fff!important}.leaflet-control-attribution{font-size:9px!important;background:rgba(255,255,255,.75)!important}.leaflet-popup-content-wrapper{border-radius:14px!important}.leaflet-popup-content{margin:13px!important}';
   document.head.appendChild(css);
 }
-function boot(){
-  captureMap();polish();
-  var radios=document.querySelectorAll('input[name="base"]');
-  if(!radios.length){setTimeout(boot,250);return;}
-  if(window.__kpTopoCoreBooted)return;window.__kpTopoCoreBooted=true;
-  radios.forEach(function(r){r.addEventListener('change',function(){if(r.checked&&r.value==='topo')addTopo();else if(r.checked)removeTopo();});});
-  var save=document.getElementById('saveKey');if(save)save.addEventListener('click',function(){if(isTopo())setTimeout(addTopo,60);});
-  setTimeout(function(){if(isTopo())addTopo();},400);
+function setStatus(t){var s=document.getElementById('status');if(s)s.textContent=t;}
+function addGps(m){
+  var b=document.getElementById('gps');
+  if(!b||b.__kpGpsStartup)return;
+  b.__kpGpsStartup=true;
+  var marker=null,accuracy=null;
+  function locate(centre){
+    if(!navigator.geolocation){setStatus('Location is not available on this device.');return;}
+    setStatus('Finding your location…');
+    navigator.geolocation.getCurrentPosition(function(p){
+      var ll=[p.coords.latitude,p.coords.longitude];
+      if(marker)m.removeLayer(marker);
+      if(accuracy)m.removeLayer(accuracy);
+      accuracy=L.circle(ll,{radius:Math.max(5,p.coords.accuracy||10),color:'#2563eb',weight:2,fillOpacity:.12});
+      marker=L.circleMarker(ll,{radius:9,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1});
+      accuracy.addTo(m);marker.addTo(m);
+      if(centre)m.setView(ll,16,{animate:false});
+      setStatus('Your location • GPS accuracy '+Math.round(p.coords.accuracy||0)+' m');
+    },function(err){
+      if(err&&err.code===1)setStatus('Location permission was denied. Allow location for this site.');
+      else setStatus('Map ready — GPS location unavailable.');
+    },{enableHighAccuracy:true,maximumAge:30000,timeout:12000});
+  }
+  b.onclick=function(){locate(true);};
+  setTimeout(function(){locate(true);},900);
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
-})();
-
-/* Startup/location fix.
-   Keep the first view on the Korehāhā Whakahau operating area instead of
-   fitting every historical/outlying feature in the dataset. Also provide a
-   visible GPS dot when the phone location button is used. */
-(function(){
-  'use strict';
-  var HOME=[-37.99,177.04],HOME_ZOOM=13;
-  function getMap(){return window.__kpMap||null;}
-  function goHome(){
-    var m=getMap();if(!m)return false;
-    try{m.setView(HOME,HOME_ZOOM,{animate:false});return true;}catch(e){return false;}
+function startup(){
+  var m=getMap();
+  if(!m){setTimeout(startup,200);return;}
+  addPolish();
+  if(!m.__kpStartupLocation){
+    m.__kpStartupLocation=true;
+    try{m.setView([-37.99,177.04],13,{animate:false});}catch(e){}
   }
-  function install(){
-    var m=getMap();
-    if(!m){setTimeout(install,250);return;}
-    if(!m.__kpStartupFix){
-      m.__kpStartupFix=true;
-      setTimeout(function(){
-        var s=document.getElementById('status');
-        if(s&&(/Trap\\.NZ data loaded|sync complete/i.test(s.textContent||'')))goHome();
-        else setTimeout(goHome,1200);
-      },700);
-      var status=document.getElementById('status');
-      if(status){
-        var observer=new MutationObserver(function(){
-          var t=status.textContent||'';
-          if(/Trap\\.NZ (sync complete|data loaded)/i.test(t))setTimeout(goHome,100);
-        });
-        observer.observe(status,{childList:true,characterData:true,subtree:true});
-      }
-    }
-    installGps(m);
-  }
-  function installGps(m){
-    var b=document.getElementById('gps');if(!b||b.__kpGpsFix)return;
-    b.__kpGpsFix=true;
-    var marker=null,accuracy=null;
-    b.onclick=function(){
-      if(!navigator.geolocation){var s=document.getElementById('status');if(s)s.textContent='Location is not available on this device.';return;}
-      var s=document.getElementById('status');if(s)s.textContent='Finding your location…';
-      navigator.geolocation.getCurrentPosition(function(p){
-        var ll=[p.coords.latitude,p.coords.longitude];
-        if(marker)m.removeLayer(marker);
-        if(accuracy)m.removeLayer(accuracy);
-        accuracy=L.circle(ll,{radius:Math.max(5,p.coords.accuracy||10),color:'#2563eb',weight:2,fillOpacity:.12});
-        marker=L.circleMarker(ll,{radius:9,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1});
-        accuracy.addTo(m);marker.addTo(m);
-        m.setView(ll,Math.max(16,m.getZoom()),{animate:false});
-        if(s)s.textContent='Your location • GPS accuracy '+Math.round(p.coords.accuracy||0)+' m';
-      },function(err){
-        if(s)s.textContent=err&&err.code===1?'Location permission was denied. Allow location for this site.':'Could not get your location.';
-      },{enableHighAccuracy:true,maximumAge:30000,timeout:12000});
-    };
-  }
-  install();
+  addGps(m);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startup);else startup();
 })();
